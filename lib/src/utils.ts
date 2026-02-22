@@ -51,8 +51,9 @@ export function matchesContentRegex(filePath: string, patterns?: RegExp | RegExp
 
     return patternList.some((pattern) => pattern.test(content));
   } catch {
-    // If file can't be read as text, skip content check
-    return true;
+    // If file can't be read as text, skip file
+    console.warn(`Warning: Could not read file ${filePath} for content regex check. Skipping file.`);
+    return false;
   }
 }
 

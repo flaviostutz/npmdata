@@ -231,7 +231,7 @@ packages:
     resolution: {integrity: sha512-LUd5euvbMLpwOF8m6ivPCbhQeSiYVNb8Vs0fQ8QjXo0JTkEHpz8pxdQf0gStltaPpw0Cca8b39KxvK9cfKRiAw==}
 
   example-files-package@file:../dist/example-files-package-1.0.0.tgz:
-    resolution: {integrity: sha512-XH2nO4or6SCuv7tFaz1meV6jThLDukTyaMYFIwo38h+i1F7VAFkq1FDlY0BunjrMGobBoW8mUv9r0tDwkobaDw==, tarball: file:../dist/example-files-package-1.0.0.tgz}
+    resolution: {integrity: sha512-r4Q2DPFFiJLN+VnStBNwEoA8s3hWiDkhvO1Pa+/1nyGoc/f75oK5S2vgev9jcFws+OHJRi+idFIHVxtNVtstxw==, tarball: file:../dist/example-files-package-1.0.0.tgz}
     version: 1.0.0
     hasBin: true
 
@@ -239,7 +239,7 @@ packages:
     resolution: {integrity: sha512-/d9sfos4yxzpwkDkuN7k2SqFKtYNmCTzgfEpz82x34IM9/zc8KGxQoXg1liNC/izpRM/MBdt44Nmx41ZWqk+FQ==}
 
   folder-publisher@file:../lib/dist/folder-publisher-0.0.1.tgz:
-    resolution: {integrity: sha512-qBN8PRWKWHDK6oI7wLQXEEa+0jJqjWrwH5Rgq6dAWcVSTK8ouLRmeWbczUvxIVT8SBB5km0glgWXGutVQ50rPw==, tarball: file:../lib/dist/folder-publisher-0.0.1.tgz}
+    resolution: {integrity: sha512-8dve5goXyFxAoesQj5Ach2Pf862FRK86KiQeDPI3zAMuHSMFdxhcC42yXajtcZ2iWYEoA1vwGvE/pj4QDpKO4g==, tarball: file:../lib/dist/folder-publisher-0.0.1.tgz}
     version: 0.0.1
     hasBin: true
 

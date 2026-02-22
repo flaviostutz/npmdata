@@ -234,7 +234,7 @@ packages:
     resolution: {integrity: sha512-/d9sfos4yxzpwkDkuN7k2SqFKtYNmCTzgfEpz82x34IM9/zc8KGxQoXg1liNC/izpRM/MBdt44Nmx41ZWqk+FQ==}
 
   folder-publisher@file:../lib/dist/folder-publisher-0.0.1.tgz:
-    resolution: {integrity: sha512-qBN8PRWKWHDK6oI7wLQXEEa+0jJqjWrwH5Rgq6dAWcVSTK8ouLRmeWbczUvxIVT8SBB5km0glgWXGutVQ50rPw==, tarball: file:../lib/dist/folder-publisher-0.0.1.tgz}
+    resolution: {integrity: sha512-8dve5goXyFxAoesQj5Ach2Pf862FRK86KiQeDPI3zAMuHSMFdxhcC42yXajtcZ2iWYEoA1vwGvE/pj4QDpKO4g==, tarball: file:../lib/dist/folder-publisher-0.0.1.tgz}
     version: 0.0.1
     hasBin: true
 

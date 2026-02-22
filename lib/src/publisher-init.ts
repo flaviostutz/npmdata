@@ -91,6 +91,9 @@ async function main() {
   const fpCliPath = require.resolve('folder-publisher/dist/main.js');
   const command = \`node "\${fpCliPath}" "\${pkg.name}" extract "\${process.cwd()}"\`;
   
+  process.on('uncaughtException', (err) => {
+    process.exit(3);
+  });
   execSync(command, { stdio: 'inherit' });
 }
 
