@@ -81,6 +81,9 @@ export async function cli(processArgs: string[]): Promise<number> {
   let contentRegex: string | undefined;
   let outDir = outputDir;
 
+  // Default patterns (will exclude common files present in packages that are not meant to be extracted normally)
+  const defaultPatterns = ['!package.json', '!bin/**', '!README.md', '!node_modules/**'];
+
   for (let i = 2; i < args.length; i++) {
     if (args[i] === '--version') {
       version = args[++i];
@@ -105,7 +108,7 @@ export async function cli(processArgs: string[]): Promise<number> {
     outputDir: path.resolve(outDir),
     check,
     allowConflicts,
-    filenamePattern: filenamePattern ? filenamePattern.split(',') : undefined,
+    filenamePattern: filenamePattern ? filenamePattern.split(',') : defaultPatterns,
     contentRegex: contentRegex ? new RegExp(contentRegex) : undefined,
   };
 

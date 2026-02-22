@@ -13,6 +13,7 @@ build-dev:
 clean:
 	rm -rf node_modules
 	rm -rf dist
+	rm -rf lib
 
 install:
 	# replace the dependency with the local package

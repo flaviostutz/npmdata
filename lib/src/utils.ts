@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
+import { minimatch } from 'minimatch';
 
 /**
  * Get hash of file contents
@@ -21,22 +22,35 @@ export function matchesFilenamePattern(filePath: string, patterns?: string | str
   const fileName = path.basename(filePath);
   const absolutePath = path.resolve(filePath);
 
-  // Simple glob matching
-  return patternList.some((pattern) => {
-    // Handle ** for recursive matching
-    if (pattern.includes('**')) {
-      let regexPattern = pattern.replace(/[$()+.[\\\]^{|}]/g, '\\$&');
-      regexPattern = regexPattern.replace(/\.\*\./g, '.*');
-      regexPattern = regexPattern.replace(/\*/g, '[^/]*');
-      regexPattern = regexPattern.replace(/\?/g, '.');
-      return new RegExp(`^${regexPattern}$`).test(absolutePath);
+  // Separate inclusive and exclusive patterns
+  const includePatterns = patternList.filter((p) => !p.startsWith('!'));
+  const excludePatterns = patternList.filter((p) => p.startsWith('!')).map((p) => p.slice(1));
+
+  // If there are exclude patterns, check for matches
+  if (excludePatterns.length > 0) {
+    for (const pattern of excludePatterns) {
+      if (matchesPattern(filePath, fileName, absolutePath, pattern)) {
+        return false; // Excluded
+      }
     }
-    // Simple glob matching for file name
-    let regexPattern = pattern.replace(/[$()+.[\\\]^{|}]/g, '\\$&');
-    regexPattern = regexPattern.replace(/\*/g, '.*');
-    regexPattern = regexPattern.replace(/\?/g, '.');
-    return new RegExp(`^${regexPattern}$`).test(fileName);
-  });
+  }
+
+  // If there are include patterns, check for matches
+  if (includePatterns.length > 0) {
+    return includePatterns.some((pattern) => matchesPattern(filePath, fileName, absolutePath, pattern));
+  }
+
+  // If only exclude patterns exist and no match, include the file
+  return true;
+}
+
+function matchesPattern(filePath: string, fileName: string, absolutePath: string, pattern: string): boolean {
+  // Use minimatch for glob pattern matching
+  if (pattern.includes('**')) {
+    return minimatch(absolutePath, pattern, { matchBase: true });
+  }
+  // Simple glob matching for file name
+  return minimatch(fileName, pattern);
 }
 
 /**

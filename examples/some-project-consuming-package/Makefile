@@ -7,4 +7,6 @@ install:
 	pnpm install
 
 extract-example-data: install
-	pnpm exec example-files-package
+# 	pnpm exec example-files-package
+	pnpm exec example-files-package extract
+# 	--filename-pattern
