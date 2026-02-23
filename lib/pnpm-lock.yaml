@@ -18,6 +18,9 @@ dependencies:
   minimatch:
     specifier: ^9.0.5
     version: 9.0.6
+  semver:
+    specifier: ^7.7.4
+    version: 7.7.4
 
 devDependencies:
   '@babel/preset-typescript':
@@ -41,6 +44,9 @@ devDependencies:
   '@types/node':
     specifier: ^20.14.8
     version: 20.19.33
+  '@types/semver':
+    specifier: ^7.7.1
+    version: 7.7.1
   esbuild-jest:
     specifier: ^0.5.0
     version: 0.5.0(esbuild@0.25.12)
@@ -1278,6 +1284,10 @@ packages:
     resolution: {integrity: sha512-raiuEPUYqXu+nvtY2Pe8s8FEmZ3x5yAH4VkLdihcPdalvsHltomrRC9BzuStrJ9yk06470hS0Crw0f1pXqD+Hg==}
     dependencies:
       '@types/node': 20.19.33
+    dev: true
+
+  /@types/semver@7.7.1:
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
     dev: true
 
   /@types/stack-utils@2.0.3:
@@ -5413,7 +5423,6 @@ packages:
     resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
     engines: {node: '>=10'}
     hasBin: true
-    dev: true
 
   /set-function-length@1.2.2:
     resolution: {integrity: sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==}

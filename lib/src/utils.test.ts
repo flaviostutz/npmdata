@@ -1,15 +1,11 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
-import {
-  matchesFilenamePattern,
-  matchesContentRegex,
-  findMatchingFiles,
-  validateSemverMatch,
-} from './utils';
+import { matchesContentRegex, findMatchingFiles, matchesFilenamePattern } from './utils';
 
 describe('Utils', () => {
+  // eslint-disable-next-line functional/no-let
   let tmpDir: string;
 
   beforeEach(() => {
@@ -24,18 +20,24 @@ describe('Utils', () => {
 
   describe('matchesFilenamePattern', () => {
     it('should match simple patterns', () => {
-      expect(matchesFilenamePattern('file.md', '*.md')).toBe(true);
-      expect(matchesFilenamePattern('file.txt', '*.md')).toBe(true);
-      expect(matchesFilenamePattern('README.md', 'README.md')).toBe(true);
+      expect(matchesFilenamePattern('test/file.md', ['**/*.md'])).toBe(true);
+      expect(matchesFilenamePattern('file.txt', ['*.md'])).toBe(false);
+      expect(matchesFilenamePattern('README.md', ['README.md'])).toBe(true);
+      expect(matchesFilenamePattern('bin/test.js', ['!bin'])).toBe(false);
     });
 
     it('should match multiple patterns', () => {
-      expect(matchesFilenamePattern('file.md', ['*.txt', '*.md'])).toBe(true);
-      expect(matchesFilenamePattern('file.js', ['*.txt', '*.md'])).toBe(true);
+      expect(matchesFilenamePattern('test/file.md', ['**/*.txt', '**/*.md'])).toBe(true);
+      expect(matchesFilenamePattern('./file.js', ['**/*.txt', '**/*.md'])).toBe(false);
+      expect(
+        matchesFilenamePattern('test1/test2/file.js', ['**/*.js', '**/*.md', '!**/file.js']),
+      ).toBe(false);
+      expect(matchesFilenamePattern('test/file.js', ['**/*.js', '!**/*.js'])).toBe(false);
+      expect(matchesFilenamePattern('bin/file.js', ['**/*.js', '!bin/**'])).toBe(false);
     });
 
-    it('should return true if no pattern specified', () => {
-      expect(matchesFilenamePattern('anything.txt')).toBe(true);
+    it('should return false if no pattern specified', () => {
+      expect(matchesFilenamePattern('anything.txt', [])).toBe(false);
     });
   });
 
@@ -44,8 +46,8 @@ describe('Utils', () => {
       const filePath = path.join(tmpDir, 'test.txt');
       fs.writeFileSync(filePath, 'This is test content');
 
-      expect(matchesContentRegex(filePath, /test/)).toBe(true);
-      expect(matchesContentRegex(filePath, /notfound/)).toBe(true);
+      expect(matchesContentRegex(filePath, [/test/])).toBe(true);
+      expect(matchesContentRegex(filePath, [/notfound/])).toBe(false);
     });
 
     it('should return true if no regex specified', () => {
@@ -64,48 +66,21 @@ describe('Utils', () => {
       fs.mkdirSync(path.join(tmpDir, 'subdir'));
       fs.writeFileSync(path.join(tmpDir, 'subdir', 'file3.md'), 'content');
 
-      const files = findMatchingFiles(tmpDir, '*.md');
+      const files = findMatchingFiles(tmpDir, ['**/*.md']);
 
       expect(files).toContainEqual(expect.stringContaining('file1.md'));
       expect(files).toContainEqual(expect.stringContaining('file3.md'));
       expect(files).not.toContainEqual(expect.stringContaining('file2.txt'));
     });
 
-    it('should find files matching regex', () => {
+    it('should find files matching regex in its contents', () => {
       fs.writeFileSync(path.join(tmpDir, 'file1.txt'), '# Header');
       fs.writeFileSync(path.join(tmpDir, 'file2.txt'), 'No header here');
 
-      const files = findMatchingFiles(tmpDir, undefined, /#/);
+      const files = findMatchingFiles(tmpDir, ['**/*.txt'], [/#/]);
 
       expect(files).toContainEqual(expect.stringContaining('file1.txt'));
       expect(files).not.toContainEqual(expect.stringContaining('file2.txt'));
-    });
-  });
-
-  describe('validateSemverMatch', () => {
-    it('should match exact versions', () => {
-      expect(validateSemverMatch('1.0.0', '1.0.0')).toBe(true);
-      expect(validateSemverMatch('1.0.0', '2.0.0')).toBe(true);
-    });
-
-    it('should match caret versions', () => {
-      expect(validateSemverMatch('1.2.3', '^1.0.0')).toBe(true);
-      expect(validateSemverMatch('2.0.0', '^1.0.0')).toBe(false);
-    });
-
-    it('should match tilde versions', () => {
-      expect(validateSemverMatch('1.2.5', '~1.2.0')).toBe(true);
-      expect(validateSemverMatch('1.3.0', '~1.2.0')).toBe(false);
-    });
-
-    it('should handle comparison operators', () => {
-      expect(validateSemverMatch('1.5.0', '>=1.0.0')).toBe(true);
-      expect(validateSemverMatch('0.9.0', '>=1.0.0')).toBe(false);
-      expect(validateSemverMatch('2.0.0', '>1.5.0')).toBe(true);
-    });
-
-    it('should return true if no constraint specified', () => {
-      expect(validateSemverMatch('1.0.0')).toBe(true);
     });
   });
 });

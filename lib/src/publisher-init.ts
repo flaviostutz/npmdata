@@ -1,5 +1,7 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+/* eslint-disable functional/immutable-data */
+/* eslint-disable no-restricted-syntax */
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { readJsonFile, writeJsonFile } from './utils';
 import { PublishablePackageJson } from './types';
@@ -73,6 +75,7 @@ export class PublisherInit {
   /**
    * Generate a CLI script template that uses the folder-publisher library CLI
    */
+  // eslint-disable-next-line class-methods-use-this
   private generateCliScript(): string {
     return `#!/usr/bin/env node
 
@@ -105,11 +108,10 @@ main();
    * Prepare package.json configuration for publishing
    * Mutates and returns the configuration object with normalized fields and publishing setup
    */
-  private preparePackageJsonConfig(
-    folders: string[],
-  ): PublishablePackageJson {
+  private preparePackageJsonConfig(folders: string[]): PublishablePackageJson {
     const packageJsonPath = path.join(this.config.workingDir, 'package.json');
 
+    // eslint-disable-next-line functional/no-let
     let packageJson: PublishablePackageJson;
 
     if (fs.existsSync(packageJsonPath)) {
@@ -134,7 +136,7 @@ main();
 
     // Update files field to include selected folders
     // Build new folder patterns based on current folders parameter
-    const newFolderPatterns = folders.map((folder) => `${folder}/**`);
+    const extraFolderPatterns = folders.map((folder) => `${folder}/**`);
 
     // Preserve existing patterns (both folder and non-folder) to avoid removing user tweaks
     const existingPatterns = (packageJson.files as string[]) || [];
@@ -148,7 +150,7 @@ main();
     // Combine and deduplicate using Set to prevent duplicates
     const filesPatterns = Array.from(
       new Set([
-        ...newFolderPatterns,
+        ...extraFolderPatterns,
         ...existingFolderPatterns,
         ...existingNonFolderPatterns,
         'package.json',
@@ -176,11 +178,13 @@ main();
    * Initialize publisher configuration with specified folders
    */
   public async init(folders: string[]): Promise<InitResult> {
+    // eslint-disable-next-line functional/no-try-statements
     try {
       if (!folders || folders.length === 0) {
         return {
           success: false,
-          message: 'folder-publisher: no folders specified. Usage: folder-publisher init <folder1> <folder2> ...',
+          message:
+            'folder-publisher: no folders specified. Usage: folder-publisher init <folder1> <folder2> ...',
         };
       }
 
@@ -204,7 +208,7 @@ main();
       const cliScriptPath = path.join(this.config.workingDir, 'bin', 'folder-publisher-extract.js');
       fs.mkdirSync(path.dirname(cliScriptPath), { recursive: true });
       const cliScript = this.generateCliScript();
-      fs.writeFileSync(cliScriptPath, cliScript, 'utf-8');
+      fs.writeFileSync(cliScriptPath, cliScript, 'utf8');
       fs.chmodSync(cliScriptPath, 0o755);
 
       return {

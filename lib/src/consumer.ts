@@ -1,5 +1,14 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+/* eslint-disable functional/no-try-statements */
+/* eslint-disable functional/no-let */
+/* eslint-disable no-continue */
+/* eslint-disable functional/immutable-data */
+/* eslint-disable no-restricted-syntax */
+/* eslint-disable no-console */
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+
+import { satisfies } from 'semver';
 
 import {
   ConsumerConfig,
@@ -9,19 +18,16 @@ import {
   ManagedFileMetadata,
 } from './types';
 import {
-  findMatchingFiles,
   ensureDir,
   removeFile,
   copyFile,
-  getFileHash,
+  calculateFileHash,
   matchesFilenamePattern,
   matchesContentRegex,
   detectPackageManager,
   getInstalledPackageVersion,
-  validateSemverMatch,
   readJsonFile,
   writeJsonFile,
-  runCommand,
 } from './utils';
 
 const MARKER_FILE = '.folder-publisher';
@@ -48,22 +54,25 @@ export class Consumer {
    */
   public async extract(): Promise<ConsumerResult> {
     // Install package if not present
-    const version = await this.ensurePackageInstalled();
+    const installedVersion = await this.ensurePackageInstalled();
+    console.info(
+      `Extracting files from package ${this.config.packageName}@${installedVersion} (package manager: ${this.packageManager})`,
+    );
 
     // Extract files from package
-    const changes = await this.extractPackageFiles(version);
+    const changes = await this.extractPackageFiles();
 
-    // Update markers
-    await this.updateMarkers(version);
+    // Cleanup any empty markers (e.g., from deleted files)
+    this.cleanupMarkers();
 
     const result: ConsumerResult = {
       created: changes.created.length,
       updated: changes.updated.length,
       deleted: changes.deleted.length,
       changes,
-      package: {
+      sourcePackage: {
         name: this.config.packageName,
-        version,
+        version: installedVersion,
       },
     };
 
@@ -74,14 +83,14 @@ export class Consumer {
    * Check if managed files are in sync
    */
   public async check(): Promise<CheckResult> {
-    const version = await this.getPackageVersion();
+    const installedVersion = getInstalledPackageVersion(this.config.packageName);
 
-    if (!version) {
+    if (!installedVersion) {
       throw new Error(`Package ${this.config.packageName} is not installed. Run extract first.`);
     }
 
     // Load all managed files
-    const allManaged = this.loadAllManagedFiles();
+    const allManagedFiles = this.loadAllManagedFiles();
 
     const differences = {
       missing: [] as string[],
@@ -90,38 +99,40 @@ export class Consumer {
     };
 
     // Filter to only files from this package
-    const thisPkgFiles = allManaged.filter((m) => m.packageName === this.config.packageName);
+    const managedFiles = allManagedFiles.filter((m) => m.packageName === this.config.packageName);
 
     // Get package files and build hash map
-    const packageContents = await this.getPackageContents(version);
+    const packageFilePaths = await this.getPackageFiles();
     const packageHashMap = new Map<string, string>();
-    for (const content of packageContents) {
-      packageHashMap.set(content.path, getFileHash(content.fullPath));
+    for (const packageFilePath of packageFilePaths) {
+      packageHashMap.set(packageFilePath.relPath, calculateFileHash(packageFilePath.fullPath));
     }
 
     // Check each managed file from this package
-    for (const metadata of thisPkgFiles) {
-      const fullPath = path.join(this.config.outputDir, metadata.path);
+    for (const managedFile of managedFiles) {
+      const managedFileFullPath = path.join(this.config.outputDir, managedFile.path);
 
-      if (!fs.existsSync(fullPath)) {
-        differences.missing.push(metadata.path);
-      } else {
-        const currentHash = getFileHash(fullPath);
-        const packageHash = packageHashMap.get(metadata.path);
-        if (packageHash && currentHash !== packageHash) {
-          differences.modified.push(metadata.path);
-        }
+      // missing file: managed by this package but not found locally
+      if (!fs.existsSync(managedFileFullPath)) {
+        differences.missing.push(managedFile.path);
+        continue;
+      }
+
+      const managedFileHash = calculateFileHash(managedFileFullPath);
+      const packageFileHash = packageHashMap.get(managedFile.path);
+      if (packageFileHash && managedFileHash !== packageFileHash) {
+        differences.modified.push(managedFile.path);
       }
     }
 
-    // Get currently available files in package
-    const packageFiles = await this.getPackageFilesList(version);
-
     // Check for files that are in package but not managed by this package
-    for (const pkgFile of packageFiles) {
-      const isManagedByThisPackage = thisPkgFiles.some((m) => m.path === pkgFile);
-      if (!isManagedByThisPackage && fs.existsSync(path.join(this.config.outputDir, pkgFile))) {
-        differences.extra.push(pkgFile);
+    for (const pkgFile of packageFilePaths) {
+      const isManagedByThisPackage = managedFiles.some((m) => m.path === pkgFile.relPath);
+      if (
+        !isManagedByThisPackage &&
+        fs.existsSync(path.join(this.config.outputDir, pkgFile.relPath))
+      ) {
+        differences.extra.push(pkgFile.relPath);
       }
     }
 
@@ -131,9 +142,9 @@ export class Consumer {
         differences.modified.length === 0 &&
         differences.extra.length === 0,
       differences,
-      package: {
+      sourcePackage: {
         name: this.config.packageName,
-        version,
+        version: installedVersion,
       },
     };
   }
@@ -142,21 +153,25 @@ export class Consumer {
    * Ensure package is installed
    */
   private async ensurePackageInstalled(): Promise<string> {
-    const installed = getInstalledPackageVersion(this.config.packageName, this.packageManager);
+    const existingVersion = getInstalledPackageVersion(this.config.packageName);
 
-    if (!installed) {
+    if (!existingVersion) {
       // Install the package
       await this.installPackage();
-    } else {
-      // Verify version if specified
-      if (this.config.version && !validateSemverMatch(installed, this.config.version)) {
-        throw new Error(
-          `Installed version ${installed} does not match constraint ${this.config.version}`,
-        );
-      }
     }
 
-    return getInstalledPackageVersion(this.config.packageName, this.packageManager)!;
+    // Verify version if specified
+    const installedVersion = getInstalledPackageVersion(this.config.packageName);
+    if (!installedVersion) {
+      throw new Error(`Couldn't find package ${this.config.packageName}`);
+    }
+    if (this.config.version && !satisfies(installedVersion, this.config.version)) {
+      throw new Error(
+        `Installed version ${installedVersion} of package '${this.config.packageName}' does not match constraint ${this.config.version}`,
+      );
+    }
+
+    return installedVersion;
   }
 
   /**
@@ -180,13 +195,14 @@ export class Consumer {
     }
 
     console.log(`Installing ${packageSpec}...`);
-    runCommand(cmd);
+    execSync(cmd, { encoding: 'utf8', stdio: 'pipe' });
   }
 
   /**
    * Extract files from the installed package
    */
-  private async extractPackageFiles(version: string): Promise<ConsumerResult['changes']> {
+  // eslint-disable-next-line complexity
+  private async extractPackageFiles(): Promise<ConsumerResult['changes']> {
     const changes: ConsumerResult['changes'] = {
       created: [],
       updated: [],
@@ -194,106 +210,101 @@ export class Consumer {
     };
 
     // Get package contents
-    const packageContents = await this.getPackageContents(version);
-    const newManagedFiles: Map<string, ManagedFileMetadata[]> = new Map();
+    const installedPackageVersion = getInstalledPackageVersion(this.config.packageName);
+    if (!installedPackageVersion) {
+      throw new Error(
+        `Failed to determine installed version of package ${this.config.packageName}`,
+      );
+    }
+    const packageFiles = await this.getPackageFiles();
+    const addedManagedFiles: Map<string, ManagedFileMetadata[]> = new Map();
 
     // Load existing managed files per directory
-    const existingByPath = this.loadAllManagedFilesMap();
+    const existingManagedFilesMap = this.loadExistingManagedFilesMap();
 
     // Extract new files from package
-    for (const srcFile of packageContents) {
-      const relPath = path.normalize(srcFile.path);
-
+    for (const packageFile of packageFiles) {
       // Check if file should be included based on filters
       if (
-        !matchesFilenamePattern(relPath, this.config.filenamePattern) ||
-        !matchesContentRegex(srcFile.fullPath, this.config.contentRegex)
+        !matchesFilenamePattern(packageFile.relPath, this.config.filenamePatterns) ||
+        !matchesContentRegex(packageFile.fullPath, this.config.contentRegexes)
       ) {
         continue;
       }
 
-      const metadata: ManagedFileMetadata = {
-        path: relPath,
-        packageName: this.config.packageName,
-        packageVersion: version,
-      };
-
-      const fullPath = path.join(this.config.outputDir, relPath);
-      ensureDir(path.dirname(fullPath));
+      const packageFileFullPath = path.join(this.config.outputDir, packageFile.relPath);
+      ensureDir(path.dirname(packageFileFullPath));
 
       // Check for conflicts
-      const existingOwner = existingByPath.get(relPath);
-      if (fs.existsSync(fullPath)) {
+      const existingOwner = existingManagedFilesMap.get(packageFile.relPath);
+      if (fs.existsSync(packageFileFullPath)) {
         if (existingOwner && existingOwner.packageName === this.config.packageName) {
           // Update existing managed file from same package
-          copyFile(srcFile.fullPath, fullPath);
-          changes.updated.push(relPath);
+          copyFile(packageFile.fullPath, packageFileFullPath);
+          changes.updated.push(packageFile.relPath);
         } else if (existingOwner && existingOwner.packageName !== this.config.packageName) {
           // File owned by different package - this is a package clash
           throw new Error(
-            `Package clash: ${relPath} already managed by ${existingOwner.packageName}@${existingOwner.packageVersion}. Cannot extract from ${this.config.packageName}. Use allowConflicts: true to override.`,
+            `Package clash: ${packageFile.relPath} already managed by ${existingOwner.packageName}@${existingOwner.packageVersion}. Cannot extract from ${this.config.packageName}. Use allowConflicts: true to override.`,
           );
         } else if (!this.config.allowConflicts) {
           throw new Error(
-            `File conflict: ${relPath} already exists and is not managed by this package. Use allowConflicts: true to override.`,
+            `File conflict: ${packageFile.relPath} already exists and is not managed by this package. Use allowConflicts: true to override.`,
           );
         } else {
           // Overwrite with allowConflicts
-          copyFile(srcFile.fullPath, fullPath);
-          changes.created.push(relPath);
+          copyFile(packageFile.fullPath, packageFileFullPath);
+          changes.created.push(packageFile.relPath);
         }
       } else {
-        copyFile(srcFile.fullPath, fullPath);
-        changes.created.push(relPath);
+        copyFile(packageFile.fullPath, packageFileFullPath);
+        changes.created.push(packageFile.relPath);
       }
 
       // Make file read-only
-      fs.chmodSync(fullPath, 0o444);
+      fs.chmodSync(packageFileFullPath, 0o444);
 
       // Store by directory - store filename with package metadata
-      const dir = path.dirname(relPath) || '.';
-      const justFileName = path.basename(relPath);
-      if (!newManagedFiles.has(dir)) {
-        newManagedFiles.set(dir, []);
+      const dir = path.dirname(packageFile.relPath) || '.';
+      const packageFileBasename = path.basename(packageFile.relPath);
+      if (!addedManagedFiles.has(dir)) {
+        addedManagedFiles.set(dir, []);
       }
-      newManagedFiles.get(dir)!.push({
-        path: justFileName,
+      addedManagedFiles.get(dir)!.push({
+        path: packageFileBasename,
         packageName: this.config.packageName,
-        packageVersion: version,
+        packageVersion: installedPackageVersion,
       });
     }
 
     // Delete files that were managed but no longer exist in package
-    for (const [existingPath, existingOwner] of existingByPath) {
-      if (existingOwner.packageName === this.config.packageName) {
-        const isInNewFiles = Array.from(newManagedFiles.values()).some((files) =>
-          files.some((m) => m.path === path.basename(existingPath)),
+    for (const [existingManagedFilePath, existingManagedFileOwner] of existingManagedFilesMap) {
+      if (existingManagedFileOwner.packageName === this.config.packageName) {
+        const isInNewFiles = Array.from(addedManagedFiles.values()).some((files) =>
+          files.some((m) => m.path === path.basename(existingManagedFilePath)),
         );
 
         if (!isInNewFiles) {
-          const fullPath = path.join(this.config.outputDir, existingPath);
+          const fullPath = path.join(this.config.outputDir, existingManagedFilePath);
           if (fs.existsSync(fullPath)) {
             removeFile(fullPath);
-            changes.deleted.push(existingPath);
+            changes.deleted.push(existingManagedFilePath);
           }
         }
       }
     }
 
     // Update marker files
-    for (const [dir, files] of newManagedFiles) {
+    for (const [dir, files] of addedManagedFiles) {
       const markerDir = dir === '.' ? this.config.outputDir : path.join(this.config.outputDir, dir);
       ensureDir(markerDir);
       const markerPath = path.join(markerDir, MARKER_FILE);
 
       // Load existing marker to preserve files from other packages
+      // eslint-disable-next-line unicorn/no-null
       let existingMarker: FolderPublisherMarker | null = null;
       if (fs.existsSync(markerPath)) {
-        try {
-          existingMarker = readJsonFile<FolderPublisherMarker>(markerPath);
-        } catch {
-          // Ignore errors reading existing marker
-        }
+        existingMarker = readJsonFile<FolderPublisherMarker>(markerPath);
       }
 
       // Merge files: keep files from other packages, replace files from this package
@@ -314,7 +325,6 @@ export class Consumer {
       const marker: FolderPublisherMarker = {
         version: '1.0.0',
         managedFiles: mergedManaged,
-        updated: Date.now(),
       };
       writeJsonFile(markerPath, marker);
       fs.chmodSync(markerPath, 0o444);
@@ -328,7 +338,7 @@ export class Consumer {
    * Clean up empty marker files
    */
   private cleanupMarkers(): void {
-    const walkDir = (dir: string) => {
+    const walkDir = (dir: string): void => {
       if (!fs.existsSync(dir)) return;
 
       const files = fs.readdirSync(dir);
@@ -361,11 +371,11 @@ export class Consumer {
   /**
    * Load all managed files from markers (as Map with package ownership info)
    */
-  private loadAllManagedFilesMap(): Map<string, ManagedFileMetadata> {
+  private loadExistingManagedFilesMap(): Map<string, ManagedFileMetadata> {
     const files = new Map<string, ManagedFileMetadata>();
     const baseDir = this.config.outputDir;
 
-    const walkDir = (dir: string) => {
+    const walkDir = (dir: string): void => {
       if (!fs.existsSync(dir)) return;
 
       const items = fs.readdirSync(dir);
@@ -407,7 +417,7 @@ export class Consumer {
     const files: ManagedFileMetadata[] = [];
     const baseDir = this.config.outputDir;
 
-    const walkDir = (dir: string) => {
+    const walkDir = (dir: string): void => {
       if (!fs.existsSync(dir)) return;
 
       const items = fs.readdirSync(dir);
@@ -447,31 +457,21 @@ export class Consumer {
   }
 
   /**
-   * Get list of files in package
-   */
-  private async getPackageFilesList(version: string): Promise<string[]> {
-    const contents = await this.getPackageContents(version);
-    return contents.map((c) => c.path);
-  }
-
-  /**
    * Get package contents (list of files)
    */
-  private async getPackageContents(
-    version: string,
-  ): Promise<Array<{ path: string; fullPath: string }>> {
-    const packagePath = this.getInstalledPackagePath(version);
+  private async getPackageFiles(): Promise<Array<{ relPath: string; fullPath: string }>> {
+    const packagePath = this.getInstalledPackagePath();
 
     if (!packagePath) {
       throw new Error(`Cannot locate installed package: ${this.config.packageName}`);
     }
 
-    const contents: Array<{ path: string; fullPath: string }> = [];
-    const walkDir = (dir: string, basePath = '') => {
+    const contents: Array<{ relPath: string; fullPath: string }> = [];
+    const walkDir = (dir: string, basePath = ''): void => {
       const files = fs.readdirSync(dir);
 
       for (const file of files) {
-        if (file === MARKER_FILE || file.startsWith('.')) continue;
+        if (file === MARKER_FILE) continue;
 
         const fullPath = path.join(dir, file);
         const relPath = basePath ? `${basePath}/${file}` : file;
@@ -480,7 +480,7 @@ export class Consumer {
         if (stat.isDirectory()) {
           walkDir(fullPath, relPath);
         } else {
-          contents.push({ path: relPath, fullPath });
+          contents.push({ relPath, fullPath });
         }
       }
     };
@@ -492,28 +492,8 @@ export class Consumer {
   /**
    * Get installed package path
    */
-  private getInstalledPackagePath(version: string): string | null {
-    try {
-      const pkgPath = require.resolve(`${this.config.packageName}/package.json`);
-      return path.dirname(pkgPath);
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Get package version
-   */
-  private async getPackageVersion(): Promise<string | null> {
-    return getInstalledPackageVersion(this.config.packageName, this.packageManager);
-  }
-
-  /**
-   * Update markers after extraction
-   */
-  private async updateMarkers(version: string): Promise<void> {
-    // This is called after extractPackageFiles which already updated markers
-    // Clean up any empty markers
-    this.cleanupMarkers();
+  private getInstalledPackagePath(): string | null {
+    const pkgPath = require.resolve(`${this.config.packageName}/package.json`);
+    return path.dirname(pkgPath);
   }
 }

@@ -1,7 +1,11 @@
 #!/usr/bin/env node
+/* eslint-disable no-restricted-syntax */
+/* eslint-disable no-plusplus */
+/* eslint-disable functional/no-let */
+/* eslint-disable no-console */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { Consumer } from './consumer';
 import { ConsumerConfig } from './types';
@@ -10,8 +14,9 @@ import { PublisherInit } from './publisher-init';
 /**
  * CLI for folder-publisher
  */
+// eslint-disable-next-line complexity
 export async function cli(processArgs: string[]): Promise<number> {
-  const args = process.argv.slice(2);
+  const args = processArgs.slice(2);
 
   if (args.length === 0) {
     printUsage();
@@ -34,11 +39,14 @@ export async function cli(processArgs: string[]): Promise<number> {
 
   // Handle init command
   if (command === 'init') {
+    // eslint-disable-next-line functional/no-let
     let sourceFoldersFlag: string | undefined;
 
     // Parse args for --folders flag
-    for (let i = 1; i < args.length; i++) {
+    // eslint-disable-next-line functional/no-let
+    for (let i = 1; i < args.length; i += 1) {
       if (args[i] === '--folders') {
+        // eslint-disable-next-line no-plusplus
         sourceFoldersFlag = args[++i];
       }
     }
@@ -62,7 +70,9 @@ export async function cli(processArgs: string[]): Promise<number> {
 
     console.log(`\n✓ ${result.message}`);
     if (result.publishedFolders) {
-      console.log(`\nThe following folders will be published: ${result.publishedFolders.join(', ')}`);
+      console.log(
+        `\nThe following folders will be published: ${result.publishedFolders.join(', ')}`,
+      );
     }
 
     return 0;
@@ -77,8 +87,8 @@ export async function cli(processArgs: string[]): Promise<number> {
   let version: string | undefined;
   let check = false;
   let allowConflicts = false;
-  let filenamePattern: string | undefined;
-  let contentRegex: string | undefined;
+  let filenamePatterns: string | undefined;
+  let contentRegexes: string | undefined;
   let outDir = outputDir;
 
   // Default patterns (will exclude common files present in packages that are not meant to be extracted normally)
@@ -91,10 +101,10 @@ export async function cli(processArgs: string[]): Promise<number> {
       check = true;
     } else if (args[i] === '--allow-conflicts') {
       allowConflicts = true;
-    } else if (args[i] === '--filename-pattern') {
-      filenamePattern = args[++i];
+    } else if (args[i] === '--files') {
+      filenamePatterns = args[++i];
     } else if (args[i] === '--content-regex') {
-      contentRegex = args[++i];
+      contentRegexes = args[++i];
     } else if (args[i] === '--output' || args[i] === '-o') {
       outDir = args[++i];
     } else if (!args[i].startsWith('-')) {
@@ -108,8 +118,11 @@ export async function cli(processArgs: string[]): Promise<number> {
     outputDir: path.resolve(outDir),
     check,
     allowConflicts,
-    filenamePattern: filenamePattern ? filenamePattern.split(',') : defaultPatterns,
-    contentRegex: contentRegex ? new RegExp(contentRegex) : undefined,
+    filenamePatterns: filenamePatterns ? filenamePatterns.split(',') : defaultPatterns,
+    contentRegexes: contentRegexes
+      ? contentRegexes.split(',').map((r) => new RegExp(r))
+      : // eslint-disable-next-line no-undefined
+        undefined,
   };
 
   const consumer = new Consumer(config);
@@ -137,44 +150,42 @@ export async function cli(processArgs: string[]): Promise<number> {
       for (const f of result.changes.deleted) console.log(`  - ${f}`);
     }
 
-    console.log(`\nPackage: ${result.package.name}@${result.package.version}`);
+    console.log(`\nPackage: ${result.sourcePackage.name}@${result.sourcePackage.version}`);
     return 0;
-
-  } else if (subCommand === 'check') {
+  }
+  if (subCommand === 'check') {
     console.log(`\nChecking ${packageName}...`);
     const result = await consumer.check();
 
     if (result.ok) {
       console.log('✓ All files are in sync');
       return 0;
-    } else {
-      console.log('✗ Files are out of sync:');
-
-      if (result.differences.missing.length > 0) {
-        console.log('\nMissing files:');
-        for (const f of result.differences.missing) console.log(`  - ${f}`);
-      }
-
-      if (result.differences.modified.length > 0) {
-        console.log('\nModified files:');
-        for (const f of result.differences.modified) console.log(`  ~ ${f}`);
-      }
-
-      if (result.differences.extra.length > 0) {
-        console.log('\nExtra files (not in package):');
-        for (const f of result.differences.extra) console.log(`  + ${f}`);
-      }
-
-      return 2;
     }
-  } else {
-    console.error(`Unknown command: ${subCommand}`);
-    printUsage();
-    return 1;
+    console.log('✗ Files are out of sync:');
+
+    if (result.differences.missing.length > 0) {
+      console.log('\nMissing files:');
+      for (const f of result.differences.missing) console.log(`  - ${f}`);
+    }
+
+    if (result.differences.modified.length > 0) {
+      console.log('\nModified files:');
+      for (const f of result.differences.modified) console.log(`  ~ ${f}`);
+    }
+
+    if (result.differences.extra.length > 0) {
+      console.log('\nExtra files (not in package):');
+      for (const f of result.differences.extra) console.log(`  + ${f}`);
+    }
+
+    return 2;
   }
+  console.error(`Unknown command: ${subCommand}`);
+  printUsage();
+  return 1;
 }
 
-function printUsage() {
+function printUsage(): void {
   console.log(`
 folder-publisher
 
@@ -200,7 +211,7 @@ Consumer Options:
   --version <version>          Version constraint (e.g., "1.0.0", "^1.0.0")
   --check                      Run in check mode instead of extract
   --allow-conflicts            Allow overwriting existing files
-  --filename-pattern <pattern> Comma-separated shell glob patterns
+  --files <pattern>           Comma-separated shell glob patterns
   --content-regex <regex>      Regex pattern to match file contents
   --output, -o <dir>           Output directory (default: current directory)
 
@@ -209,6 +220,6 @@ Examples:
   npx mydataset@1.0.0
   npx mydataset --version "^2.0.0" --output ./data
   npx mydataset --check --output ./data
-  npx mydataset --filename-pattern "*.md,docs/**" --output ./docs
+  npx mydataset --files "*.md,docs/**" --output ./docs
 `);
 }

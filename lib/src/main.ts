@@ -6,8 +6,10 @@ import { cli } from './cli';
 void (async (): Promise<void> => {
   process.on('uncaughtException', (err) => {
     const errs = `${err}`;
+    // eslint-disable-next-line functional/no-let
     let i = errs.indexOf('\n');
     if (i === -1) i = errs.length;
+    // eslint-disable-next-line no-console
     console.log(errs.slice(0, Math.max(0, i)));
     process.exit(3);
   });

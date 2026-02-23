@@ -5,12 +5,12 @@ export interface FileFilterConfig {
   /**
    * Glob patterns to match filenames (e.g., "*.md", "src/**\/*.ts")
    */
-  filenamePattern?: string | string[];
+  filenamePatterns?: string[];
 
   /**
    * Regex patterns to match file contents (files must contain at least one match)
    */
-  contentRegex?: RegExp | RegExp[];
+  contentRegexes?: RegExp[];
 }
 
 /**
@@ -81,11 +81,6 @@ export interface FolderPublisherMarker {
    * Files managed in this directory (can be from multiple packages)
    */
   managedFiles: ManagedFileMetadata[];
-
-  /**
-   * Last update timestamp
-   */
-  updated: number;
 }
 
 /**
@@ -119,7 +114,7 @@ export interface ConsumerResult {
   /**
    * Package information
    */
-  package: {
+  sourcePackage: {
     name: string;
     version: string;
   };
@@ -157,7 +152,7 @@ export interface CheckResult {
   /**
    * Package information
    */
-  package: {
+  sourcePackage: {
     name: string;
     version: string;
   };
@@ -171,19 +166,8 @@ export interface PublishablePackageJson {
   version: string;
   description?: string;
   main?: string;
-  bin?: string ;
+  bin?: string;
   files?: string[];
   dependencies?: Record<string, string>;
-  folderPublisher?: {
-    /**
-     * Filter configuration for publishing
-     */
-    filters?: FileFilterConfig;
-
-    /**
-     * Additional files to always include
-     */
-    includeConsumer?: boolean;
-  };
   [key: string]: unknown;
 }
