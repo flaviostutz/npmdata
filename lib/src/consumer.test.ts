@@ -7,8 +7,7 @@ import { execSync } from 'node:child_process';
 import archiver from 'archiver';
 
 import { extract, check } from './consumer';
-import { FolderPublisherMarker } from './types';
-import { readJsonFile } from './utils';
+import { readCsvMarker } from './utils';
 
 describe('Consumer', () => {
   // eslint-disable-next-line functional/no-let
@@ -51,24 +50,16 @@ describe('Consumer', () => {
       expect(fs.existsSync(path.join(outputDir, 'src', 'index.ts'))).toBe(true);
 
       // Verify marker was created
-      expect(fs.existsSync(path.join(outputDir, '.folder-publisher'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, '.publisher'))).toBe(true);
 
-      const rootMarker = readJsonFile<FolderPublisherMarker>(
-        path.join(outputDir, '.folder-publisher'),
-      );
-      expect(rootMarker.managedFiles.some((m) => m.packageName === 'test-extract-package')).toBe(
-        true,
-      );
+      const rootMarker = readCsvMarker(path.join(outputDir, '.publisher'));
+      expect(rootMarker.some((m) => m.packageName === 'test-extract-package')).toBe(true);
 
-      const docsMarker = readJsonFile<FolderPublisherMarker>(
-        path.join(outputDir, 'docs', '.folder-publisher'),
-      );
-      expect(docsMarker.managedFiles[0].packageName).toBe('test-extract-package');
+      const docsMarker = readCsvMarker(path.join(outputDir, 'docs', '.publisher'));
+      expect(docsMarker[0].packageName).toBe('test-extract-package');
 
-      const srcMarker = readJsonFile<FolderPublisherMarker>(
-        path.join(outputDir, 'src', '.folder-publisher'),
-      );
-      expect(srcMarker.managedFiles[0].packageName).toBe('test-extract-package');
+      const srcMarker = readCsvMarker(path.join(outputDir, 'src', '.publisher'));
+      expect(srcMarker[0].packageName).toBe('test-extract-package');
     });
 
     it('should mark extracted files as read-only', async () => {
@@ -121,6 +112,67 @@ describe('Consumer', () => {
       expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
     });
 
+    it('should be idempotent: running extraction twice produces no changes on the second run', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage(
+        'test-idempotent-package',
+        {
+          'README.md': '# Idempotent Package',
+          'docs/guide.md': '# Guide',
+          'docs/api.md': '# API',
+          'src/index.ts': 'export const value = 42;',
+        },
+        tmpDir,
+      );
+
+      // First extraction
+      await extract({
+        packageName: 'test-idempotent-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Capture file contents and modification times after first extraction
+      const snapshotMtimes: Record<string, number> = {};
+      const snapshotContents: Record<string, string> = {};
+      const filesToSnapshot = [
+        path.join(outputDir, 'README.md'),
+        path.join(outputDir, 'docs', 'guide.md'),
+        path.join(outputDir, 'docs', 'api.md'),
+        path.join(outputDir, 'src', 'index.ts'),
+      ];
+      for (const f of filesToSnapshot) {
+        snapshotMtimes[f] = fs.statSync(f).mtimeMs;
+        snapshotContents[f] = fs.readFileSync(f, 'utf8');
+      }
+
+      // Second extraction with identical package and output dir
+      const secondResult = await extract({
+        packageName: 'test-idempotent-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // No files should be added, modified, or deleted on second run; all should be skipped
+      expect(secondResult.added).toHaveLength(0);
+      expect(secondResult.modified).toHaveLength(0);
+      expect(secondResult.deleted).toHaveLength(0);
+      expect(secondResult.skipped.length).toBeGreaterThan(0);
+
+      // File contents must be identical
+      for (const f of filesToSnapshot) {
+        expect(fs.readFileSync(f, 'utf8')).toBe(snapshotContents[f]);
+      }
+
+      // Files must not have been touched (same mtime)
+      for (const f of filesToSnapshot) {
+        expect(fs.statSync(f).mtimeMs).toBe(snapshotMtimes[f]);
+      }
+    });
+
     it('should throw on file conflict with unmanaged existing file', async () => {
       const outputDir = path.join(tmpDir, 'output');
       fs.mkdirSync(outputDir, { recursive: true });
@@ -140,7 +192,7 @@ describe('Consumer', () => {
       ).rejects.toThrow('File conflict');
     });
 
-    it('should overwrite unmanaged file when allowConflicts is true', async () => {
+    it('should overwrite unmanaged file when force is true', async () => {
       const outputDir = path.join(tmpDir, 'output');
       fs.mkdirSync(outputDir, { recursive: true });
 
@@ -157,10 +209,10 @@ describe('Consumer', () => {
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
-        allowConflicts: true,
+        force: true,
       });
 
-      expect(result.created + result.updated).toBeGreaterThan(0);
+      expect(result.added.length + result.modified.length).toBeGreaterThan(0);
       const content = fs.readFileSync(path.join(outputDir, 'overwrite.md'), 'utf8');
       expect(content).toBe('# New content');
     });
@@ -187,6 +239,141 @@ describe('Consumer', () => {
 
       expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
       expect(fs.existsSync(path.join(outputDir, 'src', 'index.ts'))).toBe(false);
+    });
+
+    it('should remove deleted file entry from metadata when package drops a file', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      // First extraction: package has two files in the same directory
+      await installMockPackage(
+        'test-delete-meta-package',
+        {
+          'docs/file1.md': '# File 1',
+          'docs/file2.md': '# File 2',
+        },
+        tmpDir,
+      );
+
+      await extract({
+        packageName: 'test-delete-meta-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      const markerBefore = readCsvMarker(path.join(outputDir, 'docs', '.publisher'));
+      expect(markerBefore.some((m) => m.path === 'file2.md')).toBe(true);
+
+      // Reinstall package with file2 removed
+      await installMockPackage('test-delete-meta-package', { 'docs/file1.md': '# File 1' }, tmpDir);
+
+      const result = await extract({
+        packageName: 'test-delete-meta-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // file2 should be reported as deleted and removed from disk
+      expect(result.deleted).toHaveLength(1);
+      expect(result.deleted.some((f) => f.includes('file2.md'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'file2.md'))).toBe(false);
+
+      // metadata must no longer reference file2
+      const markerAfter = readCsvMarker(path.join(outputDir, 'docs', '.publisher'));
+      expect(markerAfter.some((m) => m.path === 'file2.md')).toBe(false);
+      // file1 must still be tracked
+      expect(markerAfter.some((m) => m.path === 'file1.md')).toBe(true);
+    });
+
+    it('should delete marker files and empty directories when all managed files are removed', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      // First extraction: package has all its files inside a subdirectory
+      await installMockPackage(
+        'test-full-cleanup-package',
+        {
+          'docs/guide.md': '# Guide',
+          'docs/api.md': '# API',
+        },
+        tmpDir,
+      );
+
+      await extract({
+        packageName: 'test-full-cleanup-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'docs', '.publisher'))).toBe(true);
+
+      // Reinstall with an empty package (all files removed from the data package)
+      await installMockPackage('test-full-cleanup-package', {}, tmpDir);
+
+      const result = await extract({
+        packageName: 'test-full-cleanup-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Both files should be deleted
+      expect(result.deleted).toHaveLength(2);
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(false);
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'api.md'))).toBe(false);
+
+      // Marker file must be removed because the directory has no managed files left
+      expect(fs.existsSync(path.join(outputDir, 'docs', '.publisher'))).toBe(false);
+
+      // Directory itself must be removed because it is now empty
+      expect(fs.existsSync(path.join(outputDir, 'docs'))).toBe(false);
+    });
+
+    it('should remove marker file but keep directory and unmanaged files when all managed files are deleted', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      // First extraction: package places a managed file alongside an unmanaged file
+      await installMockPackage(
+        'test-unmanaged-coexist-package',
+        { 'docs/managed.md': '# Managed' },
+        tmpDir,
+      );
+
+      await extract({
+        packageName: 'test-unmanaged-coexist-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Place an unmanaged file in the same directory
+      const unmanagedFile = path.join(outputDir, 'docs', 'unmanaged.md');
+      fs.writeFileSync(unmanagedFile, '# Unmanaged');
+
+      expect(fs.existsSync(path.join(outputDir, 'docs', '.publisher'))).toBe(true);
+
+      // Reinstall with an empty package (managed file dropped)
+      await installMockPackage('test-unmanaged-coexist-package', {}, tmpDir);
+
+      const result = await extract({
+        packageName: 'test-unmanaged-coexist-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Managed file must be deleted
+      expect(result.deleted).toHaveLength(1);
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'managed.md'))).toBe(false);
+
+      // Marker file must be removed because no managed files remain in this directory
+      expect(fs.existsSync(path.join(outputDir, 'docs', '.publisher'))).toBe(false);
+
+      // Unmanaged file and directory must still exist
+      expect(fs.existsSync(unmanagedFile)).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'docs'))).toBe(true);
     });
   });
 
@@ -297,6 +484,10 @@ const installMockPackage = async (
   tmpDir: string,
 ): Promise<string> => {
   const packageDir = path.join(tmpDir, packageName);
+  // remove packageDir if it already exists from a previous test run to avoid conflicts
+  if (fs.existsSync(packageDir)) {
+    fs.rmSync(packageDir, { recursive: true });
+  }
   fs.mkdirSync(packageDir, { recursive: true });
 
   // Create package.json

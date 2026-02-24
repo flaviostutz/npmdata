@@ -66,9 +66,9 @@ describe('Publisher', () => {
       const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
       expect(pkgJson.files).toContain('docs/**');
       expect(pkgJson.files).toContain('package.json');
-      expect(pkgJson.files).toContain('bin/folder-publisher-extract.js');
+      expect(pkgJson.files).toContain('bin/folder-publisher.js');
       expect(pkgJson.dependencies['folder-publisher']).toBe('latest');
-      expect(pkgJson.bin).toBe('bin/folder-publisher-extract.js');
+      expect(pkgJson.bin).toBe('bin/folder-publisher.js');
       expect(pkgJson.name).toBe(path.basename(tmpDir));
       expect(pkgJson.version).toBe('1.0.0');
     });
@@ -78,7 +78,7 @@ describe('Publisher', () => {
 
       await initPublisher(['docs'], { workingDir: tmpDir });
 
-      const cliScriptPath = path.join(tmpDir, 'bin', 'folder-publisher-extract.js');
+      const cliScriptPath = path.join(tmpDir, 'bin', 'folder-publisher.js');
       expect(fs.existsSync(cliScriptPath)).toBe(true);
       const content = fs.readFileSync(cliScriptPath, 'utf8');
       expect(content).toContain('folder-publisher');
@@ -90,7 +90,7 @@ describe('Publisher', () => {
 
       await initPublisher(['docs'], { workingDir: tmpDir });
 
-      const cliScriptPath = path.join(tmpDir, 'bin', 'folder-publisher-extract.js');
+      const cliScriptPath = path.join(tmpDir, 'bin', 'folder-publisher.js');
       const stats = fs.statSync(cliScriptPath);
       // eslint-disable-next-line no-bitwise
       expect(stats.mode & 0o111).toBeGreaterThan(0);

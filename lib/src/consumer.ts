@@ -9,13 +9,7 @@ import { execSync } from 'node:child_process';
 
 import { satisfies } from 'semver';
 
-import {
-  ConsumerConfig,
-  ConsumerResult,
-  CheckResult,
-  FolderPublisherMarker,
-  ManagedFileMetadata,
-} from './types';
+import { ConsumerConfig, ConsumerResult, CheckResult, ManagedFileMetadata } from './types';
 import {
   ensureDir,
   removeFile,
@@ -25,11 +19,11 @@ import {
   matchesContentRegex,
   detectPackageManager,
   getInstalledPackageVersion,
-  readJsonFile,
-  writeJsonFile,
+  readCsvMarker,
+  writeCsvMarker,
 } from './utils';
 
-const MARKER_FILE = '.folder-publisher';
+const MARKER_FILE = '.publisher';
 
 async function getPackageFiles(
   packageName: string,
@@ -130,11 +124,11 @@ function loadManagedFilesMap(outputDir: string): Map<string, ManagedFileMetadata
 
       if (item === MARKER_FILE) {
         try {
-          const marker = readJsonFile<FolderPublisherMarker>(fullPath);
+          const managedFiles = readCsvMarker(fullPath);
           const markerDir = path.dirname(fullPath);
           const relMarkerDir = path.relative(outputDir, markerDir);
 
-          for (const managed of marker.managedFiles) {
+          for (const managed of managedFiles) {
             const relPath =
               relMarkerDir === '.' ? managed.path : path.join(relMarkerDir, managed.path);
             files.set(relPath, managed);
@@ -168,11 +162,11 @@ function loadAllManagedFiles(outputDir: string): ManagedFileMetadata[] {
 
       if (item === MARKER_FILE) {
         try {
-          const marker = readJsonFile<FolderPublisherMarker>(fullPath);
+          const managedFiles = readCsvMarker(fullPath);
           const markerDir = path.dirname(fullPath);
           const relMarkerDir = path.relative(outputDir, markerDir);
 
-          for (const managed of marker.managedFiles) {
+          for (const managed of managedFiles) {
             const relPath =
               relMarkerDir === '.' ? managed.path : path.join(relMarkerDir, managed.path);
             files.push({
@@ -203,8 +197,8 @@ function cleanupEmptyMarkers(outputDir: string): void {
 
       if (file === MARKER_FILE) {
         try {
-          const marker = readJsonFile<FolderPublisherMarker>(fullPath);
-          if (!marker.managedFiles || marker.managedFiles.length === 0) {
+          const managedFiles = readCsvMarker(fullPath);
+          if (managedFiles.length === 0) {
             fs.chmodSync(fullPath, 0o644);
             fs.unlinkSync(fullPath);
           }
@@ -220,12 +214,40 @@ function cleanupEmptyMarkers(outputDir: string): void {
   walkDir(outputDir);
 }
 
+function cleanupEmptyDirs(outputDir: string): void {
+  const walkDir = (dir: string): boolean => {
+    if (!fs.existsSync(dir)) return true;
+
+    let isEmpty = true;
+    for (const item of fs.readdirSync(dir)) {
+      const fullPath = path.join(dir, item);
+      if (fs.statSync(fullPath).isDirectory() && !item.startsWith('.')) {
+        const childEmpty = walkDir(fullPath);
+        if (!childEmpty) isEmpty = false;
+      } else {
+        isEmpty = false;
+      }
+    }
+
+    if (isEmpty && dir !== outputDir) {
+      fs.rmdirSync(dir);
+      return true;
+    }
+    return isEmpty;
+  };
+
+  walkDir(outputDir);
+}
+
 // eslint-disable-next-line complexity
-async function extractFiles(config: ConsumerConfig): Promise<ConsumerResult['changes']> {
-  const changes: ConsumerResult['changes'] = {
-    created: [],
-    updated: [],
+async function extractFiles(
+  config: ConsumerConfig,
+): Promise<Pick<ConsumerResult, 'added' | 'modified' | 'deleted' | 'skipped'>> {
+  const changes: Pick<ConsumerResult, 'added' | 'modified' | 'deleted' | 'skipped'> = {
+    added: [],
+    modified: [],
     deleted: [],
+    skipped: [],
   };
 
   const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
@@ -236,6 +258,9 @@ async function extractFiles(config: ConsumerConfig): Promise<ConsumerResult['cha
   const packageFiles = await getPackageFiles(config.packageName, config.cwd);
   const addedByDir = new Map<string, ManagedFileMetadata[]>();
   const existingManagedMap = loadManagedFilesMap(config.outputDir);
+  const deletedOnlyDirs = new Set<string>();
+  // eslint-disable-next-line functional/no-let
+  let wasForced = false;
 
   for (const packageFile of packageFiles) {
     if (
@@ -252,23 +277,30 @@ async function extractFiles(config: ConsumerConfig): Promise<ConsumerResult['cha
 
     if (fs.existsSync(destPath)) {
       if (existingOwner?.packageName === config.packageName) {
-        copyFile(packageFile.fullPath, destPath);
-        changes.updated.push(packageFile.relPath);
+        if (calculateFileHash(packageFile.fullPath) === calculateFileHash(destPath)) {
+          changes.skipped.push(packageFile.relPath);
+        } else {
+          copyFile(packageFile.fullPath, destPath);
+          changes.modified.push(packageFile.relPath);
+        }
+        wasForced = false;
       } else if (existingOwner && existingOwner.packageName !== config.packageName) {
         throw new Error(
-          `Package clash: ${packageFile.relPath} already managed by ${existingOwner.packageName}@${existingOwner.packageVersion}. Cannot extract from ${config.packageName}. Use allowConflicts: true to override.`,
+          `Package clash: ${packageFile.relPath} already managed by ${existingOwner.packageName}@${existingOwner.packageVersion}. Cannot extract from ${config.packageName}. Use force: true to override.`,
         );
-      } else if (!config.allowConflicts) {
+      } else if (!config.force) {
         throw new Error(
-          `File conflict: ${packageFile.relPath} already exists and is not managed by this package. Use allowConflicts: true to override.`,
+          `File conflict: ${packageFile.relPath} already exists and is not managed by this package. Use force: true to override.`,
         );
       } else {
         copyFile(packageFile.fullPath, destPath);
-        changes.created.push(packageFile.relPath);
+        changes.added.push(packageFile.relPath);
+        wasForced = true;
       }
     } else {
       copyFile(packageFile.fullPath, destPath);
-      changes.created.push(packageFile.relPath);
+      changes.added.push(packageFile.relPath);
+      wasForced = false;
     }
 
     fs.chmodSync(destPath, 0o444);
@@ -281,6 +313,7 @@ async function extractFiles(config: ConsumerConfig): Promise<ConsumerResult['cha
       path: path.basename(packageFile.relPath),
       packageName: config.packageName,
       packageVersion: installedVersion,
+      force: wasForced,
     });
   }
 
@@ -298,6 +331,10 @@ async function extractFiles(config: ConsumerConfig): Promise<ConsumerResult['cha
         removeFile(fullPath);
         changes.deleted.push(relPath);
       }
+      const dir = path.dirname(relPath) === '.' ? '.' : path.dirname(relPath);
+      if (!addedByDir.has(dir)) {
+        deletedOnlyDirs.add(dir);
+      }
     }
   }
 
@@ -309,21 +346,41 @@ async function extractFiles(config: ConsumerConfig): Promise<ConsumerResult['cha
     const markerPath = path.join(markerDir, MARKER_FILE);
 
     // eslint-disable-next-line unicorn/no-null
-    let existingMarker: FolderPublisherMarker | null = null;
+    let existingFiles: ManagedFileMetadata[] = [];
     if (fs.existsSync(markerPath)) {
-      existingMarker = readJsonFile<FolderPublisherMarker>(markerPath);
+      existingFiles = readCsvMarker(markerPath);
     }
 
     // Keep entries from other packages, replace entries from this package
     const mergedFiles: ManagedFileMetadata[] = [
-      ...(existingMarker?.managedFiles ?? []).filter((m) => m.packageName !== config.packageName),
+      ...existingFiles.filter((m) => m.packageName !== config.packageName),
       // eslint-disable-next-line unicorn/no-keyword-prefix
       ...newFiles,
     ];
 
-    const marker: FolderPublisherMarker = { version: '1.0.0', managedFiles: mergedFiles };
-    writeJsonFile(markerPath, marker);
-    fs.chmodSync(markerPath, 0o444);
+    writeCsvMarker(markerPath, mergedFiles);
+  }
+
+  // Update marker files for directories where all managed files were removed (no new files added)
+  for (const dir of deletedOnlyDirs) {
+    const markerDir = dir === '.' ? config.outputDir : path.join(config.outputDir, dir);
+    const markerPath = path.join(markerDir, MARKER_FILE);
+
+    if (!fs.existsSync(markerPath)) continue;
+
+    try {
+      const existingFiles = readCsvMarker(markerPath);
+      const mergedFiles = existingFiles.filter((m) => m.packageName !== config.packageName);
+
+      if (mergedFiles.length === 0) {
+        fs.chmodSync(markerPath, 0o644);
+        fs.unlinkSync(markerPath);
+      } else {
+        writeCsvMarker(markerPath, mergedFiles);
+      }
+    } catch {
+      // Ignore unreadable marker files
+    }
   }
 
   cleanupEmptyMarkers(config.outputDir);
@@ -346,12 +403,13 @@ export async function extract(config: ConsumerConfig): Promise<ConsumerResult> {
 
   const changes = await extractFiles(config);
   cleanupEmptyMarkers(config.outputDir);
+  cleanupEmptyDirs(config.outputDir);
 
   return {
-    created: changes.created.length,
-    updated: changes.updated.length,
-    deleted: changes.deleted.length,
-    changes,
+    added: changes.added,
+    modified: changes.modified,
+    deleted: changes.deleted,
+    skipped: changes.skipped,
     sourcePackage: {
       name: config.packageName,
       version: installedVersion,

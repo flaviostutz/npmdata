@@ -88,8 +88,7 @@ export async function cli(processArgs: string[]): Promise<number> {
   // Parse options
   let packageName: string | undefined;
   let version: string | undefined;
-  const checkFlag = false;
-  let allowConflicts = false;
+  let force = false;
   let filenamePatterns: string | undefined;
   let contentRegexes: string | undefined;
   let outDir = process.cwd();
@@ -102,8 +101,8 @@ export async function cli(processArgs: string[]): Promise<number> {
       packageName = args[++i];
     } else if (args[i] === '--version') {
       version = args[++i];
-    } else if (args[i] === '--allow-conflicts') {
-      allowConflicts = true;
+    } else if (args[i] === '--force') {
+      force = true;
     } else if (args[i] === '--files') {
       filenamePatterns = args[++i];
     } else if (args[i] === '--content-regex') {
@@ -125,7 +124,7 @@ export async function cli(processArgs: string[]): Promise<number> {
     packageName,
     version,
     outputDir: path.resolve(outDir),
-    allowConflicts,
+    force,
     filenamePatterns: filenamePatterns ? filenamePatterns.split(',') : defaultPatterns,
     contentRegexes: contentRegexes
       ? contentRegexes.split(',').map((r) => new RegExp(r))
@@ -136,35 +135,33 @@ export async function cli(processArgs: string[]): Promise<number> {
   if (command === 'extract') {
     const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
     console.info(
-      `Extracting files from ${config.packageName}${installedVersion ? `@${installedVersion}` : ''}...`,
+      `Extracting files from ${config.packageName}${installedVersion ? `@${installedVersion}` : ''} to ${config.outputDir}...`,
     );
 
     const result = await extract(config);
 
+    const allChanged = [
+      ...result.added.map((f) => `A\t${f}`),
+      ...result.modified.map((f) => `M\t${f}`),
+      ...result.deleted.map((f) => `D\t${f}`),
+    ];
+
+    if (allChanged.length > 0) {
+      console.log('');
+      for (const line of allChanged) console.log(line);
+    }
+
     console.log(
-      `\n✓ Extraction complete: ${result.created} created, ${result.updated} updated, ${result.deleted} deleted`,
+      `\n✓ Extraction complete: ${result.added.length} added, ${result.modified.length} modified, ${result.deleted.length} deleted, ${result.skipped.length} skipped`,
     );
-
-    if (result.changes.created.length > 0) {
-      console.log('\nCreated files:');
-      for (const f of result.changes.created) console.log(`  + ${f}`);
-    }
-
-    if (result.changes.updated.length > 0) {
-      console.log('\nUpdated files:');
-      for (const f of result.changes.updated) console.log(`  ~ ${f}`);
-    }
-
-    if (result.changes.deleted.length > 0) {
-      console.log('\nDeleted files:');
-      for (const f of result.changes.deleted) console.log(`  - ${f}`);
-    }
-
     console.log(`\nPackage: ${result.sourcePackage.name}@${result.sourcePackage.version}`);
     return 0;
   }
   if (command === 'check') {
-    console.log(`\nChecking ${packageName}...`);
+    const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
+    console.log(
+      `\nChecking data from ${config.packageName}${installedVersion ? `@${installedVersion}` : ''} against ${config.outputDir}...`,
+    );
     const result = await check(config);
 
     if (result.ok) {
@@ -216,7 +213,7 @@ Init Options:
 Extract / Check Options:
   --package, -p <name>         Package name to extract from (required)
   --version <version>          Version constraint (e.g., "1.0.0", "^1.0.0")
-  --allow-conflicts            Allow overwriting existing files
+  --force                      Allow overwriting existing files
   --files <pattern>            Comma-separated shell glob patterns
   --content-regex <regex>      Regex pattern to match file contents
   --output, -o <dir>           Output directory (default: current directory)

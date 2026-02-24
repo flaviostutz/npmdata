@@ -279,7 +279,7 @@ describe('Utils', () => {
     });
   });
 
-  describe('readJsonFile', () => {
+  describe('readWrite JsonFile', () => {
     it('should read and parse a JSON file', () => {
       const filePath = path.join(tmpDir, 'data.json');
       fs.writeFileSync(filePath, JSON.stringify({ key: 'value', num: 42 }));
@@ -287,18 +287,6 @@ describe('Utils', () => {
       const result = readJsonFile<{ key: string; num: number }>(filePath);
       expect(result.key).toBe('value');
       expect(result.num).toBe(42);
-    });
-  });
-
-  describe('writeJsonFile', () => {
-    it('should write JSON with pretty formatting', () => {
-      const filePath = path.join(tmpDir, 'out.json');
-      writeJsonFile(filePath, { hello: 'world' });
-
-      const content = fs.readFileSync(filePath, 'utf8');
-      const parsed = JSON.parse(content);
-      expect(parsed.hello).toBe('world');
-      expect(content).toContain('\n'); // pretty formatted
     });
 
     it('should create parent directories if they do not exist', () => {

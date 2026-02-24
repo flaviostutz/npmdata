@@ -6,9 +6,9 @@ install:
 	pnpm add example-files-package@file:../dist/example-files-package-1.0.0.tgz
 	pnpm install
 
-extract-example-data: install
+build: install
 # 	pnpm exec example-files-package
-	pnpm exec example-files-package extract --files "docs/**/*"
+	pnpm exec example-files-package extract
 
 test:
 	# install the data package and extract the data

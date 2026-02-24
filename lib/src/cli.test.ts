@@ -35,10 +35,10 @@ const mockGetInstalledPackageVersion =
   getInstalledPackageVersion as MockedGetInstalledPackageVersion;
 
 const defaultExtractResult = {
-  created: 0,
-  updated: 0,
-  deleted: 0,
-  changes: { created: [], updated: [], deleted: [] },
+  added: [],
+  modified: [],
+  deleted: [],
+  skipped: [],
   sourcePackage: { name: 'my-pkg', version: '1.0.0' },
 };
 
@@ -139,14 +139,10 @@ describe('CLI', () => {
   describe('extract subcommand', () => {
     it('should call extract and return 0 on success', async () => {
       mockExtract.mockResolvedValue({
-        created: 2,
-        updated: 1,
-        deleted: 1,
-        changes: {
-          created: ['file1.md', 'file2.md'],
-          updated: ['file3.md'],
-          deleted: ['old.md'],
-        },
+        added: ['file1.md', 'file2.md'],
+        modified: ['file3.md'],
+        deleted: ['old.md'],
+        skipped: [],
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
@@ -194,21 +190,13 @@ describe('CLI', () => {
       expect(config.filenamePatterns).toContain('**/*.ts');
     });
 
-    it('should pass --allow-conflicts flag to extract config', async () => {
+    it('should pass --force flag to extract config', async () => {
       mockExtract.mockResolvedValue(defaultExtractResult);
 
-      await cli([
-        'node',
-        'cli.js',
-        'extract',
-        '--package',
-        'my-pkg',
-        '/output',
-        '--allow-conflicts',
-      ]);
+      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', '/output', '--force']);
 
       const config = mockExtract.mock.calls[0][0];
-      expect(config.allowConflicts).toBe(true);
+      expect(config.force).toBe(true);
     });
 
     it('should pass --version flag to extract config', async () => {
@@ -266,25 +254,22 @@ describe('CLI', () => {
       expect(config.filenamePatterns).toContain('!bin/**');
     });
 
-    it('should log created, updated and deleted files', async () => {
+    it('should log created, updated and deleted files with status symbols', async () => {
       mockExtract.mockResolvedValue({
-        created: 2,
-        updated: 1,
-        deleted: 1,
-        changes: {
-          created: ['file1.md', 'file2.md'],
-          updated: ['file3.md'],
-          deleted: ['old.md'],
-        },
+        added: ['file1.md', 'file2.md'],
+        modified: ['file3.md'],
+        deleted: ['old.md'],
+        skipped: [],
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
       await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', '/output']);
 
       const allLogs = (console.log as jest.Mock).mock.calls.flat().join('\n');
-      expect(allLogs).toContain('file1.md');
-      expect(allLogs).toContain('file3.md');
-      expect(allLogs).toContain('old.md');
+      expect(allLogs).toContain('A\tfile1.md');
+      expect(allLogs).toContain('A\tfile2.md');
+      expect(allLogs).toContain('M\tfile3.md');
+      expect(allLogs).toContain('D\told.md');
     });
   });
 

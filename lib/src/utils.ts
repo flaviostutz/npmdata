@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 
 import { minimatch } from 'minimatch';
 
+import { ManagedFileMetadata } from './types';
+
 /**
  * Get hash of file contents
  */
@@ -164,4 +166,36 @@ export function writeJsonFile(filePath: string, data: unknown): void {
   }
   // eslint-disable-next-line unicorn/no-null
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * Read the .publisher CSV marker file
+ */
+export function readCsvMarker(filePath: string): ManagedFileMetadata[] {
+  const content = fs.readFileSync(filePath, 'utf8');
+  const lines = content.split('\n').filter((line) => line.trim() !== '');
+  return lines.map((line) => {
+    const fields = line.split(',');
+    return {
+      path: fields[0],
+      packageName: fields[1],
+      packageVersion: fields[2],
+      force: fields[3] === 'true',
+    };
+  });
+}
+
+/**
+ * Write the .publisher CSV marker file
+ */
+export function writeCsvMarker(filePath: string, data: ManagedFileMetadata[]): void {
+  ensureDir(path.dirname(filePath));
+  if (fs.existsSync(filePath)) {
+    fs.chmodSync(filePath, 0o644);
+  }
+  const rows = data.map((m) =>
+    [m.path, m.packageName, m.packageVersion, m.force ? 'true' : 'false'].join(','),
+  );
+  fs.writeFileSync(filePath, `${rows.join('\n')}\n`, 'utf8');
+  fs.chmodSync(filePath, 0o444);
 }

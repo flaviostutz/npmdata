@@ -40,7 +40,7 @@ export type ConsumerConfig = FileFilterConfig & {
   /**
    * Allow creating conflicting files (default: false, will error)
    */
-  allowConflicts?: boolean;
+  force?: boolean;
 
   /**
    * Working directory from which to run package manager install commands (e.g. pnpm add).
@@ -67,54 +67,21 @@ export type ManagedFileMetadata = {
    * Package version that created this file
    */
   packageVersion: string;
-};
-
-/**
- * Contents of the .folder-publisher marker file
- */
-export type FolderPublisherMarker = {
-  /**
-   * Version of the marker format
-   */
-  version: string;
 
   /**
-   * Files managed in this directory (can be from multiple packages)
+   * Whether the file was written replacing an existing unmanaged file (via force flag)
    */
-  managedFiles: ManagedFileMetadata[];
+  force?: boolean;
 };
 
 /**
  * Result of a consumer operation
  */
 export type ConsumerResult = {
-  /**
-   * Number of files created
-   */
-  created: number;
-
-  /**
-   * Number of files updated
-   */
-  updated: number;
-
-  /**
-   * Number of files deleted
-   */
-  deleted: number;
-
-  /**
-   * List of created/updated/deleted file paths
-   */
-  changes: {
-    created: string[];
-    updated: string[];
-    deleted: string[];
-  };
-
-  /**
-   * Package information
-   */
+  added: string[];
+  modified: string[];
+  deleted: string[];
+  skipped: string[];
   sourcePackage: {
     name: string;
     version: string;

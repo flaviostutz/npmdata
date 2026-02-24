@@ -8,7 +8,7 @@ build: install
 	pnpm pack --pack-destination dist
 
 build-dev:
-	cd ../lib; make build; cd ../examples; make init-publisher; make build
+	cd ../lib; make build; cd ../examples; make init-publisher; make build; cd project-using-example-package; make test
 
 clean:
 	@rm -rf node_modules
@@ -30,6 +30,8 @@ test:
 install:
 	# replace the dependency with the local package
 	pnpm add folder-publisher@file:../lib/dist/folder-publisher-0.0.1.tgz
+	@# update local tar gz checksum
+	pnpm update cdk-practical-constructs
 	pnpm install
 
 lint:
