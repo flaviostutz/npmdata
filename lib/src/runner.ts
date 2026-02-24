@@ -25,6 +25,7 @@ export function run(binDir: string): void {
   // Parse --output / -o, --force, --files, --content-regex from argv
   let outputDir: string | undefined;
   let force = false;
+  let gitignore = false;
   let files: string | undefined;
   let contentRegex: string | undefined;
   const extraArgs = process.argv.slice(3);
@@ -34,6 +35,8 @@ export function run(binDir: string): void {
       i += 1;
     } else if (extraArgs[i] === '--force') {
       force = true;
+    } else if (extraArgs[i] === '--gitignore') {
+      gitignore = true;
     } else if (extraArgs[i] === '--files') {
       files = extraArgs[i + 1];
       i += 1;
@@ -45,9 +48,10 @@ export function run(binDir: string): void {
 
   const outputFlag = outputDir ? ` --output "${outputDir}"` : '';
   const forceFlag = force ? ' --force' : '';
+  const gitignoreFlag = gitignore ? ' --gitignore' : '';
   const filesFlag = files ? ` --files "${files}"` : '';
   const contentRegexFlag = contentRegex ? ` --content-regex "${contentRegex}"` : '';
-  const command = `node "${fpCliPath}" ${action} --package "${pkg.name}"${outputFlag}${forceFlag}${filesFlag}${contentRegexFlag}`;
+  const command = `node "${fpCliPath}" ${action} --package "${pkg.name}"${outputFlag}${forceFlag}${gitignoreFlag}${filesFlag}${contentRegexFlag}`;
 
   process.on('uncaughtException', () => {
     process.exit(3);

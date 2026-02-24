@@ -89,6 +89,7 @@ export async function cli(processArgs: string[]): Promise<number> {
   let packageName: string | undefined;
   let version: string | undefined;
   let force = false;
+  let gitignore = false;
   let filenamePatterns: string | undefined;
   let contentRegexes: string | undefined;
   let outDir = process.cwd();
@@ -103,6 +104,8 @@ export async function cli(processArgs: string[]): Promise<number> {
       version = args[++i];
     } else if (args[i] === '--force') {
       force = true;
+    } else if (args[i] === '--gitignore') {
+      gitignore = true;
     } else if (args[i] === '--files') {
       filenamePatterns = args[++i];
     } else if (args[i] === '--content-regex') {
@@ -125,6 +128,7 @@ export async function cli(processArgs: string[]): Promise<number> {
     version,
     outputDir: path.resolve(outDir),
     force,
+    gitignore,
     filenamePatterns: filenamePatterns ? filenamePatterns.split(',') : defaultPatterns,
     contentRegexes: contentRegexes
       ? contentRegexes.split(',').map((r) => new RegExp(r))
@@ -214,6 +218,7 @@ Extract / Check Options:
   --package, -p <name>         Package name to extract from (required)
   --version <version>          Version constraint (e.g., "1.0.0", "^1.0.0")
   --force                      Allow overwriting existing files
+  --gitignore                  Create/update .gitignore files to ignore managed files and .publisher
   --files <pattern>            Comma-separated shell glob patterns
   --content-regex <regex>      Regex pattern to match file contents
   --output, -o <dir>           Output directory (default: current directory)

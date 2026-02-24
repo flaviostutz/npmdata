@@ -47,6 +47,12 @@ export type ConsumerConfig = FileFilterConfig & {
    * Defaults to process.cwd() if not specified.
    */
   cwd?: string;
+
+  /**
+   * Automatically create/update a .gitignore file alongside each .publisher marker file,
+   * adding the managed files and the .publisher file itself to be ignored by git.
+   */
+  gitignore?: boolean;
 };
 
 /**

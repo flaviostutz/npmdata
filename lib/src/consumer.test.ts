@@ -144,7 +144,9 @@ describe('Consumer', () => {
         path.join(outputDir, 'src', 'index.ts'),
       ];
       for (const f of filesToSnapshot) {
+        // eslint-disable-next-line functional/immutable-data
         snapshotMtimes[f] = fs.statSync(f).mtimeMs;
+        // eslint-disable-next-line functional/immutable-data
         snapshotContents[f] = fs.readFileSync(f, 'utf8');
       }
 
@@ -374,6 +376,114 @@ describe('Consumer', () => {
       // Unmanaged file and directory must still exist
       expect(fs.existsSync(unmanagedFile)).toBe(true);
       expect(fs.existsSync(path.join(outputDir, 'docs'))).toBe(true);
+    });
+
+    it('should create .gitignore with managed files and .publisher when gitignore is true', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage(
+        'test-gitignore-package',
+        {
+          'README.md': '# Test',
+          'docs/guide.md': '# Guide',
+          'docs/api.md': '# API',
+        },
+        tmpDir,
+      );
+
+      await extract({
+        packageName: 'test-gitignore-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        gitignore: true,
+      });
+
+      // Root .gitignore should contain .publisher and the managed file
+      const rootGitignore = fs.readFileSync(path.join(outputDir, '.gitignore'), 'utf8');
+      expect(rootGitignore).toContain('.publisher');
+      expect(rootGitignore).toContain('README.md');
+      expect(rootGitignore).toContain('# folder-publisher:start');
+      expect(rootGitignore).toContain('# folder-publisher:end');
+
+      // docs/.gitignore should contain .publisher and both managed docs files
+      const docsGitignore = fs.readFileSync(path.join(outputDir, 'docs', '.gitignore'), 'utf8');
+      expect(docsGitignore).toContain('.publisher');
+      expect(docsGitignore).toContain('guide.md');
+      expect(docsGitignore).toContain('api.md');
+    });
+
+    it('should not create .gitignore when gitignore option is not set', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('test-no-gitignore-package', { 'README.md': '# Test' }, tmpDir);
+
+      await extract({
+        packageName: 'test-no-gitignore-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      expect(fs.existsSync(path.join(outputDir, '.gitignore'))).toBe(false);
+    });
+
+    it('should preserve existing .gitignore content when updating managed section', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      // Pre-create a .gitignore with existing content
+      fs.writeFileSync(path.join(outputDir, '.gitignore'), 'node_modules\n*.log\n');
+
+      await installMockPackage('test-gitignore-merge-package', { 'data.json': '{}' }, tmpDir);
+
+      await extract({
+        packageName: 'test-gitignore-merge-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        gitignore: true,
+      });
+
+      const content = fs.readFileSync(path.join(outputDir, '.gitignore'), 'utf8');
+      // Existing content must be preserved
+      expect(content).toContain('node_modules');
+      expect(content).toContain('*.log');
+      // Managed section must be present
+      expect(content).toContain('.publisher');
+      expect(content).toContain('data.json');
+    });
+
+    it('should remove .gitignore managed section when all managed files are deleted', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('test-gitignore-cleanup-package', { 'data.csv': 'a,b' }, tmpDir);
+
+      await extract({
+        packageName: 'test-gitignore-cleanup-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        filenamePatterns: ['*.csv'],
+        gitignore: true,
+      });
+
+      expect(fs.existsSync(path.join(outputDir, '.gitignore'))).toBe(true);
+
+      // Reinstall with an empty package (data.csv removed)
+      await installMockPackage('test-gitignore-cleanup-package', {}, tmpDir);
+
+      await extract({
+        packageName: 'test-gitignore-cleanup-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        filenamePatterns: ['*.csv'],
+        gitignore: true,
+      });
+
+      // .gitignore should be removed since there are no other entries
+      expect(fs.existsSync(path.join(outputDir, '.gitignore'))).toBe(false);
     });
   });
 

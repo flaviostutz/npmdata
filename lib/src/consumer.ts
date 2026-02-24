@@ -24,6 +24,91 @@ import {
 } from './utils';
 
 const MARKER_FILE = '.publisher';
+const GITIGNORE_FILE = '.gitignore';
+const GITIGNORE_START = '# folder-publisher:start';
+const GITIGNORE_END = '# folder-publisher:end';
+
+/**
+ * Update (or create) a .gitignore in the given directory so that the managed
+ * files and the .publisher marker file are ignored by git.
+ * If managedFilenames is empty the folder-publisher section is removed; if the
+ * resulting file is empty it is deleted.
+ */
+function updateGitignoreForDir(dir: string, managedFilenames: string[]): void {
+  const gitignorePath = path.join(dir, GITIGNORE_FILE);
+
+  let existingContent = '';
+  if (fs.existsSync(gitignorePath)) {
+    existingContent = fs.readFileSync(gitignorePath, 'utf8');
+  }
+
+  const startIdx = existingContent.indexOf(GITIGNORE_START);
+  const endIdx = existingContent.indexOf(GITIGNORE_END);
+
+  let beforeSection = existingContent;
+  let afterSection = '';
+
+  if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
+    beforeSection = existingContent.slice(0, startIdx).trimEnd();
+    afterSection = existingContent.slice(endIdx + GITIGNORE_END.length).trimStart();
+  }
+
+  if (managedFilenames.length === 0) {
+    const updatedContent = [beforeSection, afterSection].filter(Boolean).join('\n');
+    if (updatedContent.trim()) {
+      fs.writeFileSync(gitignorePath, `${updatedContent.trimEnd()}\n`, 'utf8');
+    } else if (fs.existsSync(gitignorePath)) {
+      fs.unlinkSync(gitignorePath);
+    }
+    return;
+  }
+
+  const section = [GITIGNORE_START, MARKER_FILE, ...managedFilenames.sort(), GITIGNORE_END].join(
+    '\n',
+  );
+
+  const parts = [beforeSection, section, afterSection].filter(Boolean);
+  const updatedContent = `${parts.join('\n')}\n`;
+  fs.writeFileSync(gitignorePath, updatedContent, 'utf8');
+}
+
+/**
+ * Walk outputDir and update .gitignore files for every directory that has a
+ * .publisher marker (to reflect its current managed files) and also clean up
+ * any folder-publisher sections in directories where the marker was removed.
+ */
+function updateGitignores(outputDir: string): void {
+  if (!fs.existsSync(outputDir)) return;
+
+  const walkDir = (dir: string): void => {
+    const markerPath = path.join(dir, MARKER_FILE);
+    const gitignorePath = path.join(dir, GITIGNORE_FILE);
+
+    if (fs.existsSync(markerPath)) {
+      try {
+        const managedFiles = readCsvMarker(markerPath);
+        updateGitignoreForDir(
+          dir,
+          managedFiles.map((m) => m.path),
+        );
+      } catch {
+        // Ignore unreadable marker files
+      }
+    } else if (fs.existsSync(gitignorePath)) {
+      // Clean up any leftover folder-publisher section
+      updateGitignoreForDir(dir, []);
+    }
+
+    for (const item of fs.readdirSync(dir)) {
+      const fullPath = path.join(dir, item);
+      if (fs.statSync(fullPath).isDirectory() && !item.startsWith('.')) {
+        walkDir(fullPath);
+      }
+    }
+  };
+
+  walkDir(outputDir);
+}
 
 async function getPackageFiles(
   packageName: string,
@@ -404,6 +489,10 @@ export async function extract(config: ConsumerConfig): Promise<ConsumerResult> {
   const changes = await extractFiles(config);
   cleanupEmptyMarkers(config.outputDir);
   cleanupEmptyDirs(config.outputDir);
+
+  if (config.gitignore) {
+    updateGitignores(config.outputDir);
+  }
 
   return {
     added: changes.added,
