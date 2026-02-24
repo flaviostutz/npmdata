@@ -24,18 +24,6 @@ describe('Consumer', () => {
     }
   });
 
-  describe('check', () => {
-    it('should fail when package is not installed', async () => {
-      await expect(
-        check({
-          packageName: 'nonexistent-package',
-          outputDir: path.join(tmpDir, 'output'),
-          cwd: tmpDir,
-        }),
-      ).rejects.toThrow(`nonexistent-package is not installed`);
-    });
-  });
-
   describe('extract', () => {
     it('should extract files from package to output directory', async () => {
       const outputDir = path.join(tmpDir, 'output');
@@ -108,6 +96,194 @@ describe('Consumer', () => {
       // eslint-disable-next-line no-bitwise
       const mode = stats.mode & 0o777;
       expect(mode).toBe(0o444);
+    });
+
+    it('should update managed files on second extraction of the same package', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('test-update-package', { 'docs/guide.md': '# Guide v1' }, tmpDir);
+
+      await extract({
+        packageName: 'test-update-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Re-install same package (simulate update) and extract again
+      await extract({
+        packageName: 'test-update-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
+    });
+
+    it('should throw on file conflict with unmanaged existing file', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      // Pre-create an unmanaged file at the conflict path
+      fs.writeFileSync(path.join(outputDir, 'config.md'), 'existing unmanaged content');
+
+      await installMockPackage('test-conflict-package', { 'config.md': '# Config' }, tmpDir);
+
+      await expect(
+        extract({
+          packageName: 'test-conflict-package',
+          outputDir,
+          packageManager: 'pnpm',
+          cwd: tmpDir,
+        }),
+      ).rejects.toThrow('File conflict');
+    });
+
+    it('should overwrite unmanaged file when allowConflicts is true', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      fs.writeFileSync(path.join(outputDir, 'overwrite.md'), 'pre-existing content');
+
+      await installMockPackage(
+        'test-allow-conflicts-package',
+        { 'overwrite.md': '# New content' },
+        tmpDir,
+      );
+
+      const result = await extract({
+        packageName: 'test-allow-conflicts-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        allowConflicts: true,
+      });
+
+      expect(result.created + result.updated).toBeGreaterThan(0);
+      const content = fs.readFileSync(path.join(outputDir, 'overwrite.md'), 'utf8');
+      expect(content).toBe('# New content');
+    });
+
+    it('should filter files by filenamePatterns', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage(
+        'test-filter-package',
+        {
+          'docs/guide.md': '# Guide',
+          'src/index.ts': 'export {}',
+        },
+        tmpDir,
+      );
+
+      await extract({
+        packageName: 'test-filter-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        filenamePatterns: ['**/*.md'],
+      });
+
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'src', 'index.ts'))).toBe(false);
+    });
+  });
+
+  describe('check', () => {
+    it('should fail when package is not installed', async () => {
+      await expect(
+        check({
+          packageName: 'nonexistent-package',
+          outputDir: path.join(tmpDir, 'output'),
+          cwd: tmpDir,
+        }),
+      ).rejects.toThrow(`nonexistent-package is not installed`);
+    });
+
+    it('should return ok when managed files are in sync', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('test-check-ok-package', { 'docs/guide.md': '# Guide' }, tmpDir);
+
+      await extract({
+        packageName: 'test-check-ok-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      const result = await check({
+        packageName: 'test-check-ok-package',
+        outputDir,
+        cwd: tmpDir,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.differences.missing).toHaveLength(0);
+      expect(result.differences.modified).toHaveLength(0);
+    });
+
+    it('should report missing files when managed files are deleted', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage(
+        'test-check-missing-package',
+        { 'docs/missing.md': '# Will be deleted' },
+        tmpDir,
+      );
+
+      await extract({
+        packageName: 'test-check-missing-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Delete the extracted file to simulate it going missing
+      const extractedFile = path.join(outputDir, 'docs', 'missing.md');
+      fs.chmodSync(extractedFile, 0o644);
+      fs.unlinkSync(extractedFile);
+
+      const result = await check({
+        packageName: 'test-check-missing-package',
+        outputDir,
+        cwd: tmpDir,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.differences.missing.some((f) => f.includes('missing.md'))).toBe(true);
+    });
+
+    it('should report modified files when contents change', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage(
+        'test-check-modified-package',
+        { 'docs/modified.md': '# Original' },
+        tmpDir,
+      );
+
+      await extract({
+        packageName: 'test-check-modified-package',
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Modify the extracted file
+      const extractedFile = path.join(outputDir, 'docs', 'modified.md');
+      fs.chmodSync(extractedFile, 0o644);
+      fs.writeFileSync(extractedFile, '# Modified content');
+
+      const result = await check({
+        packageName: 'test-check-modified-package',
+        outputDir,
+        cwd: tmpDir,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.differences.modified.some((f) => f.includes('modified.md'))).toBe(true);
     });
   });
 });

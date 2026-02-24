@@ -79,8 +79,18 @@ export async function cli(processArgs: string[]): Promise<number> {
 
   // Consumer commands (extract, check)
   const packageName = command;
-  const subCommand = args[1] || 'extract';
-  const outputDir = args[2] || process.cwd();
+
+  if (!args[1] || !['extract', 'check'].includes(args[1])) {
+    console.error(
+      `Error: subcommand required after package name. Use 'extract' or 'check'${
+        args[1] ? ` (got '${args[1]}')` : ''
+      }`,
+    );
+    printUsage();
+    return 1;
+  }
+
+  const subCommand = args[1];
 
   // Parse options
   let version: string | undefined;
@@ -88,7 +98,7 @@ export async function cli(processArgs: string[]): Promise<number> {
   let allowConflicts = false;
   let filenamePatterns: string | undefined;
   let contentRegexes: string | undefined;
-  let outDir = outputDir;
+  let outDir = process.cwd();
 
   // Default patterns (will exclude common files present in packages that are not meant to be extracted normally)
   const defaultPatterns = ['!package.json', '!bin/**', '!README.md', '!node_modules/**'];
@@ -177,8 +187,7 @@ export async function cli(processArgs: string[]): Promise<number> {
 
     return 2;
   }
-  console.error(`Unknown command: ${subCommand}`);
-  printUsage();
+  // unreachable, but satisfies TypeScript
   return 1;
 }
 
@@ -193,11 +202,8 @@ Commands (Publisher):
   init --folders <folders>     Initialize publishing configuration with specified folders
 
 Commands (Consumer):
-  <package-name> [command] [options]
-                               Extract files from published package
-    Commands:
-      extract                  Extract files from package (default)
-      check                    Verify if files are in sync
+  <package-name> extract [options]   Extract files from published package
+  <package-name> check   [options]   Verify if files are in sync
 
 Publisher Options:
   --folders <folders>          Comma-separated list of source folders to publish
@@ -214,9 +220,9 @@ Consumer Options:
 
 Examples:
   npx folder-publisher init --folders "data,docs,config"
-  npx mydataset@1.0.0
-  npx mydataset --version "^2.0.0" --output ./data
-  npx mydataset --check --output ./data
-  npx mydataset --files "*.md,docs/**" --output ./docs
+  npx mydataset extract --output ./data
+  npx mydataset extract --version "^2.0.0" --output ./data
+  npx mydataset extract --files "*.md,docs/**" --output ./docs
+  npx mydataset check --output ./data
 `);
 }
