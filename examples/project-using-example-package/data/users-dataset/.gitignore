@@ -1,5 +1,6 @@
 # folder-publisher:start
 .publisher
-adr-001-sample1.md
-adr-002-sample2.md
+user1.json
+user2.json
+user3.json
 # folder-publisher:end

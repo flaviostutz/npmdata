@@ -1,5 +1,4 @@
 # folder-publisher:start
 .publisher
-adr-001-sample1.md
-adr-002-sample2.md
+README.md
 # folder-publisher:end

@@ -157,7 +157,7 @@ export async function cli(processArgs: string[]): Promise<number> {
     }
 
     console.log(
-      `Extraction complete: ${result.added.length} added, ${result.modified.length} modified, ${result.deleted.length} deleted, ${result.skipped.length} skipped`,
+      `\nExtraction complete: ${result.added.length} added, ${result.modified.length} modified, ${result.deleted.length} deleted, ${result.skipped.length} skipped`,
     );
     return 0;
   }
