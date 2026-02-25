@@ -276,7 +276,7 @@ describe('CLI', () => {
     it('should return 0 when check reports files in sync', async () => {
       mockCheck.mockResolvedValue({
         ok: true,
-        differences: { missing: [], modified: [], extra: [] },
+        differences: { missing: [], modified: [] },
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
@@ -287,7 +287,7 @@ describe('CLI', () => {
     it('should return 2 when check finds missing files', async () => {
       mockCheck.mockResolvedValue({
         ok: false,
-        differences: { missing: ['file1.md'], modified: [], extra: [] },
+        differences: { missing: ['file1.md'], modified: [] },
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
@@ -301,7 +301,6 @@ describe('CLI', () => {
         differences: {
           missing: ['missing.md'],
           modified: ['modified.md'],
-          extra: ['extra.md'],
         },
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
@@ -312,7 +311,6 @@ describe('CLI', () => {
       const allLogs = (console.log as jest.Mock).mock.calls.flat().join('\n');
       expect(allLogs).toContain('missing.md');
       expect(allLogs).toContain('modified.md');
-      expect(allLogs).toContain('extra.md');
     });
 
     it('should return 1 when --package flag is missing for check', async () => {
@@ -326,7 +324,7 @@ describe('CLI', () => {
     it('should pass --check flag in config', async () => {
       mockCheck.mockResolvedValue({
         ok: true,
-        differences: { missing: [], modified: [], extra: [] },
+        differences: { missing: [], modified: [] },
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 

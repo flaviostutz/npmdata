@@ -185,11 +185,6 @@ export async function cli(processArgs: string[]): Promise<number> {
       for (const f of result.differences.modified) console.log(`  ~ ${f}`);
     }
 
-    if (result.differences.extra.length > 0) {
-      console.log('\nExtra files (not in package):');
-      for (const f of result.differences.extra) console.log(`  + ${f}`);
-    }
-
     return 2;
   }
   // unreachable, but satisfies TypeScript

@@ -527,7 +527,11 @@ export async function extract(config: ConsumerConfig): Promise<ConsumerResult> {
 }
 
 /**
- * Check if managed files are in sync with the published package
+ * Check if managed files are in sync with the published package.
+ *
+ * Uses the .publisher marker as the source of truth: reads entries for the
+ * specific package, applies the --files filter, then compares each entry
+ * against the installed package contents and the output directory.
  */
 export async function check(config: ConsumerConfig): Promise<CheckResult> {
   const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
@@ -536,47 +540,47 @@ export async function check(config: ConsumerConfig): Promise<CheckResult> {
     throw new Error(`Package ${config.packageName} is not installed. Install it first.`);
   }
 
-  const managedFiles = loadAllManagedFiles(config.outputDir).filter(
-    (m) => m.packageName === config.packageName,
-  );
+  // Load marker entries for this package and apply the --files filter
+  const markerFiles = loadAllManagedFiles(config.outputDir)
+    .filter((m) => m.packageName === config.packageName)
+    .filter((m) =>
+      matchesFilenamePattern(m.path, config.filenamePatterns ?? DEFAULT_FILENAME_PATTERNS),
+    );
 
+  // Build a hash map of the installed package files (filtered the same way)
   const packageFiles = await getPackageFiles(config.packageName, config.cwd);
   const packageHashMap = new Map(
-    packageFiles.map((f) => [f.relPath, calculateFileHash(f.fullPath)]),
+    packageFiles
+      .filter(
+        (f) =>
+          matchesFilenamePattern(f.relPath, config.filenamePatterns ?? DEFAULT_FILENAME_PATTERNS) &&
+          matchesContentRegex(f.fullPath, config.contentRegexes),
+      )
+      .map((f) => [f.relPath, calculateFileHash(f.fullPath)]),
   );
 
   const differences = {
     missing: [] as string[],
-    extra: [] as string[],
     modified: [] as string[],
   };
 
-  for (const managedFile of managedFiles) {
-    const localPath = path.join(config.outputDir, managedFile.path);
+  for (const markerFile of markerFiles) {
+    const localPath = path.join(config.outputDir, markerFile.path);
 
     if (!fs.existsSync(localPath)) {
-      differences.missing.push(managedFile.path);
+      differences.missing.push(markerFile.path);
       continue;
     }
 
-    const packageHash = packageHashMap.get(managedFile.path);
-    if (packageHash && calculateFileHash(localPath) !== packageHash) {
-      differences.modified.push(managedFile.path);
-    }
-  }
-
-  for (const pkgFile of packageFiles) {
-    const isManagedByThisPackage = managedFiles.some((m) => m.path === pkgFile.relPath);
-    if (!isManagedByThisPackage && fs.existsSync(path.join(config.outputDir, pkgFile.relPath))) {
-      differences.extra.push(pkgFile.relPath);
+    const packageHash = packageHashMap.get(markerFile.path);
+    // eslint-disable-next-line no-undefined
+    if (packageHash !== undefined && calculateFileHash(localPath) !== packageHash) {
+      differences.modified.push(markerFile.path);
     }
   }
 
   return {
-    ok:
-      differences.missing.length === 0 &&
-      differences.modified.length === 0 &&
-      differences.extra.length === 0,
+    ok: differences.missing.length === 0 && differences.modified.length === 0,
     differences,
     sourcePackage: {
       name: config.packageName,

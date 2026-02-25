@@ -120,17 +120,12 @@ export type CheckResult = {
    */
   differences: {
     /**
-     * Files that exist locally but not in package
+     * Files that are in the .publisher marker but missing from the output directory
      */
     missing: string[];
 
     /**
-     * Files that exist in package but not locally
-     */
-    extra: string[];
-
-    /**
-     * Files whose contents differ
+     * Files whose contents differ from the package source
      */
     modified: string[];
   };
