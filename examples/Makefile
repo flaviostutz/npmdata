@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 init-publisher: install
-	pnpm exec folder-publisher init --folders docs,data
+	pnpm exec npmdist init --folders docs,data
 
 build: install
 	rm -rf dist
@@ -29,7 +29,7 @@ test:
 
 install:
 	# replace the dependency with the local package
-	pnpm add folder-publisher@file:../lib/dist/folder-publisher-0.0.1.tgz
+	pnpm add npmdist@file:../lib/dist/npmdist-0.0.1.tgz
 	@# update local tar gz checksum
 	pnpm update cdk-practical-constructs
 	pnpm install

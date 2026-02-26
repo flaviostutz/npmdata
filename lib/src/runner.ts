@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * Runs the folder-publisher CLI (extract or check) on behalf of a publishable package.
+ * Runs the npmdist CLI (extract or check) on behalf of a publishable package.
  * Called from the minimal generated bin script with its own __dirname as binDir.
  */
 export function run(binDir: string): void {
   const pkgJsonPath = path.join(binDir, '../package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgJsonPath).toString()) as { name: string };
 
-  const fpCliPath = require.resolve('folder-publisher/dist/main.js', {
+  const fpCliPath = require.resolve('npmdist/dist/main.js', {
     paths: [binDir],
   });
 

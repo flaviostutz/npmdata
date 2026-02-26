@@ -1,4 +1,4 @@
-# folder-publisher
+# npmdist
 
 Publish folders as npm packages and extract them in any workspace. Use it to distribute shared assets — ML datasets, documentation, ADRs, configuration files — across multiple projects through any npm-compatible registry.
 
@@ -14,7 +14,7 @@ Publish folders as npm packages and extract them in any workspace. Use it to dis
 In the project whose folders you want to share:
 
 ```sh
-pnpm dlx folder-publisher init --folders "docs,data,configs"
+pnpm dlx npmdist init --folders "docs,data,configs"
 ```
 
 This updates `package.json` with the right `files`, `bin`, and `dependencies` fields. Then publish normally:
@@ -29,16 +29,16 @@ npm publish
 
 ```sh
 # extract all files from the package
-npx folder-publisher extract --package my-shared-assets --output ./data
+npx npmdist extract --package my-shared-assets --output ./data
 
 # extract a specific version
-npx folder-publisher extract --package my-shared-assets --version "^2.0.0" --output ./data
+npx npmdist extract --package my-shared-assets --version "^2.0.0" --output ./data
 
 # extract only markdown files
-npx folder-publisher extract --package my-shared-assets --files "**/*.md" --output ./docs
+npx npmdist extract --package my-shared-assets --files "**/*.md" --output ./docs
 
 # also write .gitignore entries for managed files
-npx folder-publisher extract --package my-shared-assets --output ./data --gitignore
+npx npmdist extract --package my-shared-assets --output ./data --gitignore
 ```
 
 If the published package includes its own bin script (normally when it's prepared using "init") you can also call it directly so it extracts data that is inside the package itself:
@@ -53,7 +53,7 @@ Check the /examples folder to see this in action
 ### 3. Check files are in sync
 
 ```sh
-npx folder-publisher check --package my-shared-assets --output ./data
+npx npmdist check --package my-shared-assets --output ./data
 # exit 0 = in sync, exit 2 = differences found
 ```
 
@@ -61,7 +61,7 @@ npx folder-publisher check --package my-shared-assets --output ./data
 
 ```
 Usage:
-  npx folder-publisher [init|extract|check] [options]
+  npx npmdist [init|extract|check] [options]
 
 Commands:
   init      Set up publishing configuration in a package
@@ -87,10 +87,10 @@ Extract / Check options:
 
 ## Library usage
 
-`folder-publisher` also exports a programmatic API:
+`npmdist` also exports a programmatic API:
 
 ```typescript
-import { extract, check, initPublisher } from 'folder-publisher';
+import { extract, check, initPublisher } from 'npmdist';
 
 // extract files
 const result = await extract({

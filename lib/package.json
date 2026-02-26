@@ -1,5 +1,5 @@
 {
-  "name": "folder-publisher",
+  "name": "npmdist",
   "version": "0.0.1",
   "description": "",
   "main": "dist/index.js",
@@ -14,14 +14,14 @@
   "scripts": {},
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/flaviostutz/folder-publisher.git"
+    "url": "git+https://github.com/flaviostutz/npmdist.git"
   },
   "author": "flaviostutz",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/flaviostutz/folder-publisher/issues"
+    "url": "https://github.com/flaviostutz/npmdist/issues"
   },
-  "homepage": "https://github.com/flaviostutz/folder-publisher#readme",
+  "homepage": "https://github.com/flaviostutz/npmdist#readme",
   "devDependencies": {
     "@babel/preset-typescript": "^7.21.0",
     "@stutzlab/eslint-config": "^3.2.1",

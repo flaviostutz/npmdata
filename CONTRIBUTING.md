@@ -1,6 +1,6 @@
 # CONTRIBUTING
 
-Thank you for being interested in helping with folder-publisher!
+Thank you for being interested in helping with npmdist!
 
 ## The best way to start
 

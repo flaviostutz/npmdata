@@ -407,8 +407,8 @@ describe('Consumer', () => {
       const rootGitignore = fs.readFileSync(path.join(outputDir, '.gitignore'), 'utf8');
       expect(rootGitignore).toContain('.publisher');
       expect(rootGitignore).toContain('README.md');
-      expect(rootGitignore).toContain('# folder-publisher:start');
-      expect(rootGitignore).toContain('# folder-publisher:end');
+      expect(rootGitignore).toContain('# npmdist:start');
+      expect(rootGitignore).toContain('# npmdist:end');
 
       // docs/.gitignore should contain .publisher and both managed docs files
       const docsGitignore = fs.readFileSync(path.join(outputDir, 'docs', '.gitignore'), 'utf8');

@@ -1,5 +1,5 @@
-# folder-publisher:start
+# npmdist:start
 .publisher
 adr-001-sample1.md
 adr-002-sample2.md
-# folder-publisher:end
+# npmdist:end

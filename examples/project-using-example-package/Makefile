@@ -1,7 +1,7 @@
 install:
-	# copy local relative dependencies (required by local folder-publisher package)
+	# copy local relative dependencies (required by local npmdist package)
 	mkdir -p ../lib/dist
-	cp -R ../../lib/dist/folder-publisher-0.0.1.tgz ../lib/dist/
+	cp -R ../../lib/dist/npmdist-0.0.1.tgz ../lib/dist/
 
 	pnpm add example-files-package@file:../dist/example-files-package-1.0.0.tgz
 	pnpm install
