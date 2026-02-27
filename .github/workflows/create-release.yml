@@ -5,8 +5,6 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-  create-tag:
-    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:

@@ -3,9 +3,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-  create-tag:
+  release-pre:
     runs-on: ubuntu-latest
     permissions:
       contents: write
