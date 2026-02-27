@@ -1,6 +1,16 @@
 /* eslint-disable no-console */
+import fs from 'node:fs';
+import path from 'node:path';
+
 // eslint-disable-next-line import/order
 import { cli } from './cli';
+
+// eslint-disable-next-line import/order, import/first
+import { extract, check } from './consumer';
+// eslint-disable-next-line import/order, import/first
+import { initPublisher } from './publisher';
+// eslint-disable-next-line import/order, import/first
+import { getInstalledPackageVersion } from './utils';
 
 jest.mock('./consumer', () => ({
   extract: jest.fn(),
@@ -15,13 +25,6 @@ jest.mock('./utils', () => ({
   ...jest.requireActual('./utils'),
   getInstalledPackageVersion: jest.fn(),
 }));
-
-// eslint-disable-next-line import/order, import/first
-import { extract, check } from './consumer';
-// eslint-disable-next-line import/order, import/first
-import { initPublisher } from './publisher';
-// eslint-disable-next-line import/order, import/first
-import { getInstalledPackageVersion } from './utils';
 
 type MockedExtract = jest.MockedFunction<typeof extract>;
 type MockedCheck = jest.MockedFunction<typeof check>;
@@ -49,6 +52,11 @@ describe('CLI', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     jest.spyOn(console, 'info').mockImplementation(() => {});
     mockGetInstalledPackageVersion.mockReturnValue('1.0.0');
+    // delete ./output folder if it exists to ensure clean state for tests
+    const outputPath = path.join(__dirname, 'output');
+    if (fs.existsSync(outputPath)) {
+      fs.rmSync(outputPath, { recursive: true, force: true });
+    }
   });
 
   afterEach(() => {
@@ -180,7 +188,7 @@ describe('CLI', () => {
         'extract',
         '--package',
         'my-pkg',
-        '/output',
+        './output',
         '--files',
         '**/*.md,**/*.ts',
       ]);
@@ -193,7 +201,7 @@ describe('CLI', () => {
     it('should pass --force flag to extract config', async () => {
       mockExtract.mockResolvedValue(defaultExtractResult);
 
-      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', '/output', '--force']);
+      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', './output', '--force']);
 
       const config = mockExtract.mock.calls[0][0];
       expect(config.force).toBe(true);
@@ -208,7 +216,7 @@ describe('CLI', () => {
         'extract',
         '--package',
         'my-pkg',
-        '/output',
+        './output',
         '--version',
         '1.2.x',
       ]);
@@ -226,7 +234,7 @@ describe('CLI', () => {
         'extract',
         '--package',
         'my-pkg',
-        '/output',
+        './output',
         '--content-regex',
         'foo,bar',
       ]);
@@ -238,7 +246,7 @@ describe('CLI', () => {
     it('should pass --output/-o flag to extract config', async () => {
       mockExtract.mockResolvedValue(defaultExtractResult);
 
-      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', '-o', '/custom-output']);
+      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', '-o', './custom-output']);
 
       const config = mockExtract.mock.calls[0][0];
       expect(config.outputDir).toContain('custom-output');
@@ -247,7 +255,7 @@ describe('CLI', () => {
     it('should pass undefined filenamePatterns to extract when --files not specified', async () => {
       mockExtract.mockResolvedValue(defaultExtractResult);
 
-      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', '/output']);
+      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', './output']);
 
       const config = mockExtract.mock.calls[0][0];
       expect(config.filenamePatterns).toBeUndefined();
@@ -262,7 +270,7 @@ describe('CLI', () => {
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
-      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', '/output']);
+      await cli(['node', 'cli.js', 'extract', '--package', 'my-pkg', './output']);
 
       const allLogs = (console.log as jest.Mock).mock.calls.flat().join('\n');
       expect(allLogs).toContain('A\tfile1.md');
@@ -280,7 +288,7 @@ describe('CLI', () => {
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
-      const exitCode = await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', '/output']);
+      const exitCode = await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', './output']);
       expect(exitCode).toBe(0);
     });
 
@@ -291,7 +299,7 @@ describe('CLI', () => {
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
-      const exitCode = await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', '/output']);
+      const exitCode = await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', './output']);
       expect(exitCode).toBe(2);
     });
 
@@ -305,7 +313,7 @@ describe('CLI', () => {
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
-      const exitCode = await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', '/output']);
+      const exitCode = await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', './output']);
       expect(exitCode).toBe(2);
 
       const allLogs = (console.log as jest.Mock).mock.calls.flat().join('\n');
@@ -328,7 +336,7 @@ describe('CLI', () => {
         sourcePackage: { name: 'my-pkg', version: '1.0.0' },
       });
 
-      await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', '/output', '--check']);
+      await cli(['node', 'cli.js', 'check', '--package', 'my-pkg', './output', '--check']);
       expect(mockCheck).toHaveBeenCalled();
     });
   });

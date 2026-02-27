@@ -1,5 +1,8 @@
 SHELL := /bin/bash
 
+%:
+	@echo "Unknown target: $@. Ignoring"
+
 init-publisher: install
 	pnpm exec npmdist init --folders docs,data
 
@@ -33,8 +36,5 @@ install:
 	@# update local tar gz checksum
 	pnpm update cdk-practical-constructs
 	pnpm install
-
-lint:
-	echo "Nothing to lint. Ignoring"
 
 all: build test
