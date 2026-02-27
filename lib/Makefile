@@ -14,18 +14,17 @@ build: install
 
 lint:
 	pnpm exec eslint ./src --ext .ts
-	# FIXME
+	# FIXME migrate to upgraded eslint rules and re-enable this check
 # 	pnpm audit --audit-level high
 
 lint-fix:
 	pnpm exec eslint . --ext .ts --fix
 
 test-watch:
-	pnpm exec jest -i --watch
+	pnpm exec jest --watch
 
 test:
-	@# can't be in parallel because we use nock that has shared contexts
-	pnpm exec jest -i --verbose
+	pnpm exec jest --verbose
 
 clean:
 	rm -rf node_modules
@@ -34,12 +33,6 @@ clean:
 all: build lint test
 
 install:
-	# corepack enable
-# 	# To circunvent https://github.com/nodejs/corepack/issues/612
-# 	corepack enable pnpm
-# 	corepack use pnpm@8.9.0
-# 	COREPACK_INTEGRITY_KEYS=0 pnpm --version
-
 	pnpm install --frozen-lockfile --config.dedupe-peer-dependents=false
 
 publish:
@@ -48,7 +41,7 @@ publish:
 	if echo "$$VERSION" | grep -q '-'; then \
 		TAG=$$(echo "$$VERSION" | sed 's/[0-9]*\.[0-9]*\.[0-9]*-\([a-zA-Z][a-zA-Z0-9]*\).*/\1/'); \
 		echo "Prerelease version $$VERSION detected, publishing with --tag $$TAG to avoid it being 'latest'"; \
-		npm publish --no-git-checks --provenance --tag "$$TAG"; \
+		npm publish --no-git-checks --tag "$$TAG"; \
 	else \
-		npm publish --no-git-checks --provenance; \
+		npm publish --no-git-checks; \
 	fi
