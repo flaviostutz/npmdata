@@ -7,7 +7,7 @@ build: install
 	pnpm exec tsc --outDir dist
 
 	@# remove all tests from distribution
-	@-find -E ./dist -regex '.*\.test\..*|.*__tests.*' -exec rm -rf {} \; 2> /dev/null
+	@-find ./dist \( -regex '.*\.test\..*' -o -regex '.*__tests.*' \) -exec rm -rf {} \; 2> /dev/null
 
 	@# Create pack to be used by examples app to simulate real usage of the lib
 	pnpm pack --pack-destination dist
