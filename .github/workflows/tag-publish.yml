@@ -8,13 +8,19 @@ jobs:
 
   build:
     name: Check package
-    uses: flaviostutz/gh-makefile/.github/workflows/make-ci.yml@main
-    with:
-      working-directory: ./
-      tooling: node
-      tooling-version: 20
-      target-build: true
-      target-test: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - run: make build
+      - run: make lint
+      - run: make test
 
   publish:
     runs-on: ubuntu-latest
@@ -22,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
+        with:
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

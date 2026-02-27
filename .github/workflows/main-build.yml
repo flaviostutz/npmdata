@@ -1,4 +1,4 @@
-name: build-main
+name: main-build
 on:
   push:
     branches:
@@ -10,7 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
+        with:
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: make all
+          registry-url: 'https://registry.npmjs.org'
+      - run: make build
+      - run: make lint
+      - run: make test
