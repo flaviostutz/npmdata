@@ -43,14 +43,5 @@ install:
 	pnpm install --frozen-lockfile --config.dedupe-peer-dependents=false
 
 publish:
-	@if [ "$${NPM_ACCESS_TOKEN}" == "" ]; then \
-		echo "env NPM_ACCESS_TOKEN is required"; \
-		exit 1; \
-	fi
-
-	# check if tag is current and bump version in package.json to latest tag
 	npx -y monotag@1.26.0 current --bump-action=latest --prefix=
-
-	echo "" >> .npmrc
-	echo "//registry.npmjs.org/:_authToken=$${NPM_ACCESS_TOKEN}" >> .npmrc
-	pnpm publish --no-git-checks
+	npm publish --no-git-checks --provenance
