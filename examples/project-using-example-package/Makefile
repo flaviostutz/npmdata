@@ -8,18 +8,20 @@ install:
 
 build: install
 # 	pnpm exec example-files-package
-	pnpm exec example-files-package extract --gitignore --files "docs/**/*"
+	pnpm exec example-files-package extract --files "docs/**/*,conf/**/*" --gitignore
 
 test:
 	# install the data package and extract the data
 	make clean
 	make install
-	pnpm exec example-files-package extract --files "docs/**/*"
+	pnpm exec example-files-package extract --files "docs/**/*,conf/**/*" --gitignore
 
 	# fail if a expected extracted file doesn't exist
 	test -e docs/adrs/adr-001-sample1.md
+	test -e conf/globals.js
 
 clean:
 	@rm -rf node_modules
 	@rm -rf data
 	@rm -rf docs
+	@rm -rf conf

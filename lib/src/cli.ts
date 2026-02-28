@@ -7,10 +7,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { extract, check } from './consumer';
-import { ConsumerConfig } from './types';
+import { extract, check, list } from './consumer';
+import { ConsumerConfig, ProgressEvent } from './types';
 import { initPublisher } from './publisher';
-import { getInstalledPackageVersion } from './utils';
 
 /**
  * CLI for npmdata
@@ -42,13 +41,18 @@ export async function cli(processArgs: string[]): Promise<number> {
   if (command === 'init') {
     // eslint-disable-next-line functional/no-let
     let sourceFoldersFlag: string | undefined;
+    // eslint-disable-next-line functional/no-let
+    let additionalPackagesFlag: string | undefined;
 
-    // Parse args for --folders flag
+    // Parse args for --folders and --packages flags
     // eslint-disable-next-line functional/no-let
     for (let i = 1; i < args.length; i += 1) {
       if (args[i] === '--folders') {
         // eslint-disable-next-line no-plusplus
         sourceFoldersFlag = args[++i];
+      } else if (args[i] === '--packages') {
+        // eslint-disable-next-line no-plusplus
+        additionalPackagesFlag = args[++i];
       }
     }
 
@@ -60,72 +64,153 @@ export async function cli(processArgs: string[]): Promise<number> {
     }
 
     const folders = sourceFoldersFlag.split(',').map((f) => f.trim());
+    const additionalPackages = additionalPackagesFlag
+      ? additionalPackagesFlag.split(',').map((p) => p.trim())
+      : [];
 
-    const result = await initPublisher(folders);
+    const result = await initPublisher(folders, { additionalPackages });
 
     if (!result.success) {
-      console.error(`\n✗ Error: ${result.message}`);
+      console.error(`\nError: ${result.message}`);
       return 1;
     }
 
-    console.log(`\n✓ ${result.message}`);
+    console.log(`\n${result.message}`);
     if (result.publishedFolders) {
       console.log(
         `\nThe following folders will be published: ${result.publishedFolders.join(', ')}`,
       );
     }
+    if (result.additionalPackages && result.additionalPackages.length > 0) {
+      console.log(`\nAdditional data source packages: ${result.additionalPackages.join(', ')}`);
+    }
 
+    return 0;
+  }
+
+  // Handle list command
+  if (command === 'list') {
+    let outDir = process.cwd();
+    let outputFlagProvided = false;
+
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === '--output' || args[i] === '-o') {
+        outDir = args[++i];
+        outputFlagProvided = true;
+      } else if (!args[i].startsWith('-')) {
+        outDir = args[i];
+        outputFlagProvided = true;
+      }
+    }
+
+    if (!outputFlagProvided) {
+      console.info(`Listing managed files in current directory: ${outDir}`);
+    }
+
+    const entries = list(path.resolve(outDir));
+
+    if (entries.length === 0) {
+      console.log('No managed files found.');
+      return 0;
+    }
+
+    for (const entry of entries) {
+      console.log(`\n${entry.packageName}@${entry.packageVersion} (${entry.files.length} files)`);
+      for (const f of entry.files) {
+        console.log(`  ${f}`);
+      }
+    }
     return 0;
   }
 
   // Consumer commands (extract, check)
   if (!['extract', 'check'].includes(command)) {
-    console.error(`Error: unknown command '${command}'. Use 'init', 'extract', or 'check'`);
+    console.error(`Error: unknown command '${command}'. Use 'init', 'extract', 'check', or 'list'`);
     printUsage();
     return 1;
   }
 
-  // Parse options
-  let packageName: string | undefined;
-  let version: string | undefined;
+  // Parse options common to extract and check
+  let packageSpecs: string | undefined;
   let force = false;
   let gitignore = false;
+  let dryRun = false;
+  let upgrade = false;
+  let silent = false;
   let filenamePatterns: string | undefined;
   let contentRegexes: string | undefined;
   let outDir = process.cwd();
+  let outputFlagProvided = false;
 
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--package' || args[i] === '-p') {
-      packageName = args[++i];
-    } else if (args[i] === '--version') {
-      version = args[++i];
+    if (args[i] === '--packages') {
+      packageSpecs = args[++i];
     } else if (args[i] === '--force') {
       force = true;
+    } else if (args[i] === '--silent') {
+      silent = true;
     } else if (args[i] === '--gitignore') {
       gitignore = true;
+    } else if (args[i] === '--dry-run') {
+      dryRun = true;
+    } else if (args[i] === '--upgrade') {
+      upgrade = true;
     } else if (args[i] === '--files') {
       filenamePatterns = args[++i];
     } else if (args[i] === '--content-regex') {
       contentRegexes = args[++i];
     } else if (args[i] === '--output' || args[i] === '-o') {
       outDir = args[++i];
+      outputFlagProvided = true;
     } else if (!args[i].startsWith('-')) {
       outDir = args[i];
+      outputFlagProvided = true;
     }
   }
 
-  if (!packageName) {
-    console.error(`Error: --package option is required for '${command}' command`);
+  if (!packageSpecs) {
+    console.error(`Error: --packages option is required for '${command}' command`);
     printUsage();
     return 1;
   }
 
+  if (!outputFlagProvided && !silent) {
+    console.info(`No --output specified. Using current directory: ${outDir}`);
+  }
+
+  const packages = packageSpecs.split(',').map((s) => s.trim());
+
+  // Build onProgress handler that prints file-level events grouped by package
+  const onProgress = silent
+    ? // eslint-disable-next-line no-undefined
+      undefined
+    : (event: ProgressEvent): void => {
+        switch (event.type) {
+          case 'package-start':
+            console.log(`\n>> Package ${event.packageName}@${event.packageVersion}`);
+            break;
+          case 'file-added':
+            console.log(`A\t${event.file}`);
+            break;
+          case 'file-modified':
+            console.log(`M\t${event.file}`);
+            break;
+          case 'file-deleted':
+            console.log(`D\t${event.file}`);
+            break;
+          default:
+            break;
+        }
+      };
+
   const config: ConsumerConfig = {
-    packageName,
-    version,
+    packages,
     outputDir: path.resolve(outDir),
     force,
     gitignore,
+    dryRun,
+    upgrade,
+    onProgress,
     filenamePatterns: filenamePatterns
       ? filenamePatterns.split(',')
       : // eslint-disable-next-line no-undefined
@@ -137,56 +222,45 @@ export async function cli(processArgs: string[]): Promise<number> {
   };
 
   if (command === 'extract') {
-    const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
-    const relDir = path.relative(process.cwd(), config.outputDir) || '.';
-    console.info(
-      `Extracting files from ${config.packageName}${installedVersion ? `@${installedVersion}` : ''} to '${relDir}'...`,
-    );
+    if (!silent) {
+      if (dryRun) console.info('Dry run: simulating extraction (no files will be written)...');
+      else console.info('Extracting package files...');
+    }
 
     const result = await extract(config);
 
-    const allChanged = [
-      ...result.added.map((f) => `A\t${f}`),
-      ...result.modified.map((f) => `M\t${f}`),
-      ...result.deleted.map((f) => `D\t${f}`),
-    ];
-
-    if (allChanged.length > 0) {
-      console.log('');
-      for (const line of allChanged) console.log(line);
-    }
-
     console.log(
-      `\nExtraction complete: ${result.added.length} added, ${result.modified.length} modified, ${result.deleted.length} deleted, ${result.skipped.length} skipped`,
+      `\nExtraction complete: ${result.added.length} added, ${result.modified.length} modified, ${result.deleted.length} deleted, ${result.skipped.length} skipped${dryRun ? ' (dry run)' : ''}`,
     );
     return 0;
   }
+
   if (command === 'check') {
-    const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
     const relDir = path.relative(process.cwd(), config.outputDir) || '.';
-    console.log(
-      `\nChecking data from ${config.packageName}${installedVersion ? `@${installedVersion}` : ''} against ${relDir}...`,
-    );
+    console.log(`\nChecking data from ${config.packages.join(', ')} against ${relDir}...`);
     const result = await check(config);
 
+    for (const pkg of result.sourcePackages) {
+      const pkgLabel = `${pkg.name}@${pkg.version}`;
+      if (pkg.ok) {
+        console.log(`  ${pkgLabel}: in sync`);
+      } else {
+        console.log(`  ${pkgLabel}: out of sync`);
+        for (const f of pkg.differences.missing) console.log(`    - missing:  ${f}`);
+        for (const f of pkg.differences.modified) console.log(`    ~ modified: ${f}`);
+        for (const f of pkg.differences.extra) console.log(`    + extra:    ${f}`);
+      }
+    }
+
     if (result.ok) {
-      console.log('✓ All files are in sync');
+      console.log('\nAll files are in sync');
       return 0;
     }
-    console.log('✗ Files are out of sync:');
 
-    if (result.differences.missing.length > 0) {
-      console.log('\nMissing files:');
-      for (const f of result.differences.missing) console.log(`  - ${f}`);
-    }
-
-    if (result.differences.modified.length > 0) {
-      console.log('\nModified files:');
-      for (const f of result.differences.modified) console.log(`  ~ ${f}`);
-    }
-
+    console.log('\nFiles are out of sync');
     return 2;
   }
+
   // unreachable, but satisfies TypeScript
   return 1;
 }
@@ -196,12 +270,13 @@ function printUsage(): void {
 npmdata
 
 Usage:
-  npx npmdata [init|extract|check] [options]
+  npx npmdata [init|extract|check|list] [options]
 
 Commands:
   init                         Initialize publishing configuration
-  extract                      Extract files from a published package
-  check                        Verify if local files are in sync with a package
+  extract                      Extract files from one or more published packages
+  check                        Verify if local files are in sync with packages
+  list                         List all managed files in the output directory
 
 Global Options:
   --help, -h                   Show this help message
@@ -209,21 +284,37 @@ Global Options:
 
 Init Options:
   --folders <folders>          Comma-separated list of source folders to publish (required)
+  --packages <specs>           Comma-separated additional package specs to use as data sources.
+                               Each spec is "name" or "name@version"
+                               e.g. "shared-data@^1.0.0,other-pkg@2.x"
 
 Extract / Check Options:
-  --package, -p <name>         Package name to extract from (required)
-  --version <version>          Version constraint (e.g., "1.0.0", "^1.0.0")
-  --force                      Allow overwriting existing files
-  --gitignore                  Create/update .gitignore files to ignore managed files and .publisher
-  --files <pattern>            Comma-separated shell glob patterns
+  --packages <specs>           Comma-separated package specs to extract from (required).
+                               Each spec is "name" or "name@version"
+                               e.g. "my-pkg@^1.2.3,other-pkg@2.x"
+  --output, -o <dir>           Output directory (default: current directory, with a warning)
+  --force                      Allow overwriting existing unmanaged files
+  --gitignore                  Create/update .gitignore to ignore managed files and .publisher
+  --dry-run                    Simulate extraction without writing any files
+  --upgrade                    Re-install packages even when a satisfying version is installed
+  --silent                     Print only the final result line, suppressing package and file listing
+  --files <pattern>            Comma-separated shell glob patterns to filter files
   --content-regex <regex>      Regex pattern to match file contents
-  --output, -o <dir>           Output directory (default: current directory)
+
+List Options:
+  --output, -o <dir>           Directory to inspect (default: current directory)
 
 Examples:
   npx npmdata init --folders "data,docs,config"
-  npx npmdata extract --package mydataset --output ./data
-  npx npmdata extract --package mydataset --version "^2.0.0" --output ./data
-  npx npmdata extract --package mydataset --files "*.md,docs/**" --output ./docs
-  npx npmdata check --package mydataset --output ./data
+  npx npmdata extract --packages mydataset --output ./data
+  npx npmdata extract --packages mydataset@^2.0.0 --output ./data
+  npx npmdata extract --packages "mydataset@^2.0.0,otherpkg@1.x" --output ./data
+  npx npmdata extract --packages mydataset --dry-run --output ./data
+  npx npmdata extract --packages mydataset --silent --output ./data
+  npx npmdata extract --packages mydataset --upgrade --output ./data
+  npx npmdata extract --packages mydataset --files "*.md,docs/**" --output ./docs
+  npx npmdata check --packages mydataset --output ./data
+  npx npmdata check --packages "mydataset,otherpkg" --output ./data
+  npx npmdata list --output ./data
 `);
 }

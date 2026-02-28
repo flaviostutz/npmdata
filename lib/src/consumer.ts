@@ -27,6 +27,7 @@ import {
   getInstalledPackageVersion,
   readCsvMarker,
   writeCsvMarker,
+  parsePackageSpec,
 } from './utils';
 
 const MARKER_FILE = '.publisher';
@@ -183,7 +184,14 @@ async function installPackage(
       cmd = `npm install ${packageSpec}`;
   }
 
-  execSync(cmd, { encoding: 'utf8', stdio: 'pipe', cwd });
+  // eslint-disable-next-line functional/no-try-statements
+  try {
+    execSync(cmd, { encoding: 'utf8', stdio: 'pipe', cwd });
+  } catch (error: unknown) {
+    const e = error as { stderr?: string; stdout?: string; message?: string };
+    const detail = (e.stderr ?? e.stdout ?? e.message ?? String(error)).trim();
+    throw new Error(`Failed to install ${packageSpec}: ${detail}`);
+  }
 }
 
 async function ensurePackageInstalled(
@@ -191,10 +199,11 @@ async function ensurePackageInstalled(
   version: string | undefined,
   packageManager: 'npm' | 'yarn' | 'pnpm',
   cwd?: string,
+  upgrade?: boolean,
 ): Promise<string> {
   const existingVersion = getInstalledPackageVersion(packageName, cwd);
 
-  if (!existingVersion) {
+  if (!existingVersion || upgrade) {
     await installPackage(packageName, version, packageManager, cwd);
   }
 
@@ -345,6 +354,7 @@ function cleanupEmptyDirs(outputDir: string): void {
 // eslint-disable-next-line complexity
 async function extractFiles(
   config: ConsumerConfig,
+  packageName: string,
 ): Promise<Pick<ConsumerResult, 'added' | 'modified' | 'deleted' | 'skipped'>> {
   const changes: Pick<ConsumerResult, 'added' | 'modified' | 'deleted' | 'skipped'> = {
     added: [],
@@ -353,15 +363,23 @@ async function extractFiles(
     skipped: [],
   };
 
-  const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
+  const dryRun = config.dryRun ?? false;
+  const emit = config.onProgress;
+
+  const installedVersion = getInstalledPackageVersion(packageName, config.cwd);
   if (!installedVersion) {
-    throw new Error(`Failed to determine installed version of package ${config.packageName}`);
+    throw new Error(`Failed to determine installed version of package ${packageName}`);
   }
 
-  const packageFiles = await getPackageFiles(config.packageName, config.cwd);
+  emit?.({ type: 'package-start', packageName, packageVersion: installedVersion });
+
+  const packageFiles = await getPackageFiles(packageName, config.cwd);
   const addedByDir = new Map<string, ManagedFileMetadata[]>();
   const existingManagedMap = loadManagedFilesMap(config.outputDir);
   const deletedOnlyDirs = new Set<string>();
+  // Tracks basenames (per directory) force-claimed from a different package so the
+  // marker-file merge can evict the previous owner's entry.
+  const forceClaimedByDir = new Map<string, Set<string>>();
   // eslint-disable-next-line functional/no-let
   let wasForced = false;
 
@@ -377,39 +395,54 @@ async function extractFiles(
     }
 
     const destPath = path.join(config.outputDir, packageFile.relPath);
-    ensureDir(path.dirname(destPath));
+    if (!dryRun) ensureDir(path.dirname(destPath));
 
     const existingOwner = existingManagedMap.get(packageFile.relPath);
 
     if (fs.existsSync(destPath)) {
-      if (existingOwner?.packageName === config.packageName) {
+      if (existingOwner?.packageName === packageName) {
         if (calculateFileHash(packageFile.fullPath) === calculateFileHash(destPath)) {
           changes.skipped.push(packageFile.relPath);
+          emit?.({ type: 'file-skipped', packageName, file: packageFile.relPath });
         } else {
-          copyFile(packageFile.fullPath, destPath);
+          if (!dryRun) copyFile(packageFile.fullPath, destPath);
           changes.modified.push(packageFile.relPath);
+          emit?.({ type: 'file-modified', packageName, file: packageFile.relPath });
         }
         wasForced = false;
-      } else if (existingOwner && existingOwner.packageName !== config.packageName) {
-        throw new Error(
-          `Package clash: ${packageFile.relPath} already managed by ${existingOwner.packageName}@${existingOwner.packageVersion}. Cannot extract from ${config.packageName}. Use force: true to override.`,
-        );
-      } else if (!config.force) {
-        throw new Error(
-          `File conflict: ${packageFile.relPath} already exists and is not managed by this package. Use force: true to override.`,
-        );
       } else {
-        copyFile(packageFile.fullPath, destPath);
-        changes.added.push(packageFile.relPath);
+        // File exists but is owned by a different package (clash) or is unmanaged (conflict).
+        // Behaviour is identical in both cases: throw when force is false, overwrite when true.
+        if (!config.force) {
+          if (existingOwner) {
+            throw new Error(
+              `Package clash: ${packageFile.relPath} already managed by ${existingOwner.packageName}@${existingOwner.packageVersion}. Cannot extract from ${packageName}. Use force: true to override.`,
+            );
+          }
+          throw new Error(
+            `File conflict: ${packageFile.relPath} already exists and is not managed by npmdata. Use force: true to override.`,
+          );
+        }
+        // force=true: overwrite the existing file and take ownership.
+        if (!dryRun) copyFile(packageFile.fullPath, destPath);
+        changes.modified.push(packageFile.relPath);
+        emit?.({ type: 'file-modified', packageName, file: packageFile.relPath });
         wasForced = true;
+        if (existingOwner) {
+          // Evict the previous owner's entry from the marker file.
+          const claimDir = path.dirname(packageFile.relPath) || '.';
+          if (!forceClaimedByDir.has(claimDir)) forceClaimedByDir.set(claimDir, new Set());
+          forceClaimedByDir.get(claimDir)!.add(path.basename(packageFile.relPath));
+        }
       }
     } else {
-      copyFile(packageFile.fullPath, destPath);
+      if (!dryRun) copyFile(packageFile.fullPath, destPath);
       changes.added.push(packageFile.relPath);
+      emit?.({ type: 'file-added', packageName, file: packageFile.relPath });
       wasForced = false;
     }
 
-    fs.chmodSync(destPath, 0o444);
+    if (!dryRun && fs.existsSync(destPath)) fs.chmodSync(destPath, 0o444);
 
     const dir = path.dirname(packageFile.relPath) || '.';
     if (!addedByDir.has(dir)) {
@@ -417,7 +450,7 @@ async function extractFiles(
     }
     addedByDir.get(dir)!.push({
       path: path.basename(packageFile.relPath),
-      packageName: config.packageName,
+      packageName,
       packageVersion: installedVersion,
       force: wasForced,
     });
@@ -425,7 +458,7 @@ async function extractFiles(
 
   // Delete files that were managed by this package but are no longer in the package
   for (const [relPath, owner] of existingManagedMap) {
-    if (owner.packageName !== config.packageName) continue;
+    if (owner.packageName !== packageName) continue;
 
     const fileDir = path.dirname(relPath) === '.' ? '.' : path.dirname(relPath);
     const dirFiles = addedByDir.get(fileDir) ?? [];
@@ -434,8 +467,9 @@ async function extractFiles(
     if (!stillPresent) {
       const fullPath = path.join(config.outputDir, relPath);
       if (fs.existsSync(fullPath)) {
-        removeFile(fullPath);
+        if (!dryRun) removeFile(fullPath);
         changes.deleted.push(relPath);
+        emit?.({ type: 'file-deleted', packageName, file: relPath });
       }
       const dir = path.dirname(relPath) === '.' ? '.' : path.dirname(relPath);
       if (!addedByDir.has(dir)) {
@@ -444,147 +478,255 @@ async function extractFiles(
     }
   }
 
-  // Write updated marker files
-  // eslint-disable-next-line unicorn/no-keyword-prefix
-  for (const [dir, newFiles] of addedByDir) {
-    const markerDir = dir === '.' ? config.outputDir : path.join(config.outputDir, dir);
-    ensureDir(markerDir);
-    const markerPath = path.join(markerDir, MARKER_FILE);
+  if (!dryRun) {
+    // Write updated marker files
+    // eslint-disable-next-line unicorn/no-keyword-prefix
+    for (const [dir, newFiles] of addedByDir) {
+      const markerDir = dir === '.' ? config.outputDir : path.join(config.outputDir, dir);
+      ensureDir(markerDir);
+      const markerPath = path.join(markerDir, MARKER_FILE);
 
-    // eslint-disable-next-line unicorn/no-null
-    let existingFiles: ManagedFileMetadata[] = [];
-    if (fs.existsSync(markerPath)) {
-      existingFiles = readCsvMarker(markerPath);
-    }
-
-    // Keep entries from other packages, replace entries from this package
-    const mergedFiles: ManagedFileMetadata[] = [
-      ...existingFiles.filter((m) => m.packageName !== config.packageName),
-      // eslint-disable-next-line unicorn/no-keyword-prefix
-      ...newFiles,
-    ];
-
-    writeCsvMarker(markerPath, mergedFiles);
-  }
-
-  // Update marker files for directories where all managed files were removed (no new files added)
-  for (const dir of deletedOnlyDirs) {
-    const markerDir = dir === '.' ? config.outputDir : path.join(config.outputDir, dir);
-    const markerPath = path.join(markerDir, MARKER_FILE);
-
-    if (!fs.existsSync(markerPath)) continue;
-
-    try {
-      const existingFiles = readCsvMarker(markerPath);
-      const mergedFiles = existingFiles.filter((m) => m.packageName !== config.packageName);
-
-      if (mergedFiles.length === 0) {
-        fs.chmodSync(markerPath, 0o644);
-        fs.unlinkSync(markerPath);
-      } else {
-        writeCsvMarker(markerPath, mergedFiles);
+      // eslint-disable-next-line unicorn/no-null
+      let existingFiles: ManagedFileMetadata[] = [];
+      if (fs.existsSync(markerPath)) {
+        existingFiles = readCsvMarker(markerPath);
       }
-    } catch {
-      // Ignore unreadable marker files
+
+      // Keep entries from other packages, replace entries from this package.
+      // Also evict entries from other packages for any file force-claimed in this pass.
+      const claimedInDir = forceClaimedByDir.get(dir);
+      const mergedFiles: ManagedFileMetadata[] = [
+        ...existingFiles.filter((m) => m.packageName !== packageName && !claimedInDir?.has(m.path)),
+        // eslint-disable-next-line unicorn/no-keyword-prefix
+        ...newFiles,
+      ];
+
+      writeCsvMarker(markerPath, mergedFiles);
     }
+
+    // Update marker files for directories where all managed files were removed (no new files added)
+    for (const dir of deletedOnlyDirs) {
+      const markerDir = dir === '.' ? config.outputDir : path.join(config.outputDir, dir);
+      const markerPath = path.join(markerDir, MARKER_FILE);
+
+      if (!fs.existsSync(markerPath)) continue;
+
+      try {
+        const existingFiles = readCsvMarker(markerPath);
+        const mergedFiles = existingFiles.filter((m) => m.packageName !== packageName);
+
+        if (mergedFiles.length === 0) {
+          fs.chmodSync(markerPath, 0o644);
+          fs.unlinkSync(markerPath);
+        } else {
+          writeCsvMarker(markerPath, mergedFiles);
+        }
+      } catch {
+        // Ignore unreadable marker files
+      }
+    }
+
+    cleanupEmptyMarkers(config.outputDir);
   }
 
-  cleanupEmptyMarkers(config.outputDir);
+  emit?.({ type: 'package-end', packageName, packageVersion: installedVersion });
   return changes;
 }
 
 /**
- * Extract files from published package to output directory
+ * Extract files from published packages to output directory.
+ *
+ * Phase 1 validates and installs every package before touching disk.
+ * Phase 2 runs file extraction for all packages in parallel.
+ * When dryRun is true no files are written; the result reflects what would change.
  */
 export async function extract(config: ConsumerConfig): Promise<ConsumerResult> {
-  ensureDir(config.outputDir);
+  const dryRun = config.dryRun ?? false;
+  if (!dryRun) ensureDir(config.outputDir);
 
-  const packageManager = config.packageManager ?? detectPackageManager();
-  const installedVersion = await ensurePackageInstalled(
-    config.packageName,
-    config.version,
-    packageManager,
-    config.cwd,
-  );
+  const packageManager = config.packageManager ?? detectPackageManager(config.cwd);
+  const sourcePackages: ConsumerResult['sourcePackages'] = [];
+  const totalChanges: Pick<ConsumerResult, 'added' | 'modified' | 'deleted' | 'skipped'> = {
+    added: [],
+    modified: [],
+    deleted: [],
+    skipped: [],
+  };
 
-  const changes = await extractFiles(config);
-  cleanupEmptyMarkers(config.outputDir);
-  // Always clean up .gitignore entries for removed files; only add new entries when gitignore: true.
-  updateGitignores(config.outputDir, config.gitignore ?? false);
-  // Run after gitignore cleanup so dirs kept alive only by a .gitignore get removed.
-  cleanupEmptyDirs(config.outputDir);
+  // Phase 1: validate and install every package before touching the disk.
+  // If any package is missing or at a wrong version, we abort before writing anything.
+  const resolvedPackages: Array<{
+    name: string;
+    version: string | undefined;
+    installedVersion: string;
+  }> = [];
+  for (const spec of config.packages) {
+    const { name, version } = parsePackageSpec(spec);
+    // eslint-disable-next-line no-await-in-loop
+    const installedVersion = await ensurePackageInstalled(
+      name,
+      version,
+      packageManager,
+      config.cwd,
+      config.upgrade,
+    );
+    resolvedPackages.push({ name, version, installedVersion });
+  }
+
+  // Phase 2: all packages are verified — extract files serially so progress events are grouped by package.
+  for (const { name, installedVersion } of resolvedPackages) {
+    // eslint-disable-next-line no-await-in-loop
+    const changes = await extractFiles(config, name);
+    totalChanges.added.push(...changes.added);
+    totalChanges.modified.push(...changes.modified);
+    totalChanges.deleted.push(...changes.deleted);
+    totalChanges.skipped.push(...changes.skipped);
+    sourcePackages.push({ name, version: installedVersion, changes });
+  }
+
+  if (!dryRun) {
+    cleanupEmptyMarkers(config.outputDir);
+    // Always clean up .gitignore entries for removed files; only add new entries when gitignore: true.
+    updateGitignores(config.outputDir, config.gitignore ?? false);
+    // Run after gitignore cleanup so dirs kept alive only by a .gitignore get removed.
+    cleanupEmptyDirs(config.outputDir);
+  }
 
   return {
-    added: changes.added,
-    modified: changes.modified,
-    deleted: changes.deleted,
-    skipped: changes.skipped,
-    sourcePackage: {
-      name: config.packageName,
-      version: installedVersion,
-    },
+    ...totalChanges,
+    sourcePackages,
   };
 }
 
 /**
- * Check if managed files are in sync with the published package.
+ * Check if managed files are in sync with published packages.
  *
- * Uses the .publisher marker as the source of truth: reads entries for the
- * specific package, applies the --files filter, then compares each entry
- * against the installed package contents and the output directory.
+ * Performs a bidirectional comparison:
+ * - Files in the .publisher marker that are missing from or modified in the output directory.
+ * - Files present in the package (matching filters) that have not been extracted yet ("extra").
+ *
+ * If a version constraint is specified (e.g. "my-pkg@^1.0.0"), the installed version is
+ * validated against it so stale installs are caught.
  */
 export async function check(config: ConsumerConfig): Promise<CheckResult> {
-  const installedVersion = getInstalledPackageVersion(config.packageName, config.cwd);
-
-  if (!installedVersion) {
-    throw new Error(`Package ${config.packageName} is not installed. Install it first.`);
-  }
-
-  // Load marker entries for this package and apply the --files filter
-  const markerFiles = loadAllManagedFiles(config.outputDir)
-    .filter((m) => m.packageName === config.packageName)
-    .filter((m) =>
-      matchesFilenamePattern(m.path, config.filenamePatterns ?? DEFAULT_FILENAME_PATTERNS),
-    );
-
-  // Build a hash map of the installed package files (filtered the same way)
-  const packageFiles = await getPackageFiles(config.packageName, config.cwd);
-  const packageHashMap = new Map(
-    packageFiles
-      .filter(
-        (f) =>
-          matchesFilenamePattern(f.relPath, config.filenamePatterns ?? DEFAULT_FILENAME_PATTERNS) &&
-          matchesContentRegex(f.fullPath, config.contentRegexes),
-      )
-      .map((f) => [f.relPath, calculateFileHash(f.fullPath)]),
-  );
-
-  const differences = {
-    missing: [] as string[],
-    modified: [] as string[],
+  const sourcePackages: CheckResult['sourcePackages'] = [];
+  const totalDifferences: CheckResult['differences'] = {
+    missing: [],
+    modified: [],
+    extra: [],
   };
 
-  for (const markerFile of markerFiles) {
-    const localPath = path.join(config.outputDir, markerFile.path);
+  for (const spec of config.packages) {
+    const { name, version: constraint } = parsePackageSpec(spec);
+    const installedVersion = getInstalledPackageVersion(name, config.cwd);
 
-    if (!fs.existsSync(localPath)) {
-      differences.missing.push(markerFile.path);
-      continue;
+    if (!installedVersion) {
+      throw new Error(`Package ${name} is not installed. Run 'extract' first.`);
     }
 
-    const packageHash = packageHashMap.get(markerFile.path);
-    // eslint-disable-next-line no-undefined
-    if (packageHash !== undefined && calculateFileHash(localPath) !== packageHash) {
-      differences.modified.push(markerFile.path);
+    if (constraint && !satisfies(installedVersion, constraint)) {
+      throw new Error(
+        `Installed version ${installedVersion} of package '${name}' does not satisfy constraint ${constraint}. Run 'extract' to update.`,
+      );
     }
+
+    // Load marker entries for this package and apply the --files filter
+    const markerFiles = loadAllManagedFiles(config.outputDir)
+      .filter((m) => m.packageName === name)
+      .filter((m) =>
+        matchesFilenamePattern(m.path, config.filenamePatterns ?? DEFAULT_FILENAME_PATTERNS),
+      );
+    const markerPaths = new Set(markerFiles.map((m) => m.path));
+
+    // Build a hash map of the installed package files (filtered the same way)
+    // eslint-disable-next-line no-await-in-loop
+    const packageFiles = await getPackageFiles(name, config.cwd);
+    const filteredPackageFiles = packageFiles.filter(
+      (f) =>
+        matchesFilenamePattern(f.relPath, config.filenamePatterns ?? DEFAULT_FILENAME_PATTERNS) &&
+        matchesContentRegex(f.fullPath, config.contentRegexes),
+    );
+    const packageHashMap = new Map(
+      filteredPackageFiles.map((f) => [f.relPath, calculateFileHash(f.fullPath)]),
+    );
+
+    const pkgDiff: CheckResult['sourcePackages'][number]['differences'] = {
+      missing: [],
+      modified: [],
+      extra: [],
+    };
+
+    // Check marker entries against local files and package contents
+    for (const markerFile of markerFiles) {
+      const localPath = path.join(config.outputDir, markerFile.path);
+
+      if (!fs.existsSync(localPath)) {
+        pkgDiff.missing.push(markerFile.path);
+        continue;
+      }
+
+      const packageHash = packageHashMap.get(markerFile.path);
+      // eslint-disable-next-line no-undefined
+      if (packageHash !== undefined && calculateFileHash(localPath) !== packageHash) {
+        pkgDiff.modified.push(markerFile.path);
+      }
+    }
+
+    // Detect package files that were never extracted (not in the marker)
+    for (const [relPath] of packageHashMap) {
+      if (!markerPaths.has(relPath)) {
+        pkgDiff.extra.push(relPath);
+      }
+    }
+
+    const pkgOk =
+      pkgDiff.missing.length === 0 && pkgDiff.modified.length === 0 && pkgDiff.extra.length === 0;
+    sourcePackages.push({ name, version: installedVersion, ok: pkgOk, differences: pkgDiff });
+
+    totalDifferences.missing.push(...pkgDiff.missing);
+    totalDifferences.modified.push(...pkgDiff.modified);
+    totalDifferences.extra.push(...pkgDiff.extra);
   }
 
   return {
-    ok: differences.missing.length === 0 && differences.modified.length === 0,
-    differences,
-    sourcePackage: {
-      name: config.packageName,
-      version: installedVersion,
-    },
+    ok:
+      totalDifferences.missing.length === 0 &&
+      totalDifferences.modified.length === 0 &&
+      totalDifferences.extra.length === 0,
+    differences: totalDifferences,
+    sourcePackages,
   };
+}
+
+/**
+ * List all managed files currently extracted in outputDir, grouped by package.
+ */
+export function list(outputDir: string): Array<{
+  packageName: string;
+  packageVersion: string;
+  files: string[];
+}> {
+  const allManaged = loadAllManagedFiles(outputDir);
+
+  const grouped = new Map<
+    string,
+    { packageName: string; packageVersion: string; files: string[] }
+  >();
+
+  for (const managed of allManaged) {
+    const key = `${managed.packageName}@${managed.packageVersion}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        packageName: managed.packageName,
+        packageVersion: managed.packageVersion,
+        files: [],
+      });
+    }
+    grouped.get(key)!.files.push(managed.path);
+  }
+
+  return [...grouped.values()].map((entry) => ({
+    ...entry,
+    files: entry.files.sort(),
+  }));
 }

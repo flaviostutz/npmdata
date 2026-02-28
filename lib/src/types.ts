@@ -26,18 +26,26 @@ export type FileFilterConfig = {
 };
 
 /**
+ * Event emitted by extract() as files are processed.
+ */
+export type ProgressEvent =
+  | { type: 'package-start'; packageName: string; packageVersion: string }
+  | { type: 'package-end'; packageName: string; packageVersion: string }
+  | { type: 'file-added'; packageName: string; file: string }
+  | { type: 'file-modified'; packageName: string; file: string }
+  | { type: 'file-deleted'; packageName: string; file: string }
+  | { type: 'file-skipped'; packageName: string; file: string };
+
+/**
  * Configuration for the consumer
  */
 export type ConsumerConfig = FileFilterConfig & {
   /**
-   * Package name to install from registry
+   * Package specs to install from registry. Each entry is either a bare package name
+   * ("my-pkg") or a name with a semver constraint ("my-pkg@^1.2.3"). Multiple packages
+   * can be provided and they will all be extracted into outputDir.
    */
-  packageName: string;
-
-  /**
-   * Optional version constraint (semver pattern)
-   */
-  version?: string;
+  packages: string[];
 
   /**
    * Output directory where files will be extracted
@@ -65,6 +73,24 @@ export type ConsumerConfig = FileFilterConfig & {
    * adding the managed files and the .publisher file itself to be ignored by git.
    */
   gitignore?: boolean;
+
+  /**
+   * When true, simulate extraction without writing anything to disk.
+   * The returned ConsumerResult reflects what would have changed.
+   */
+  dryRun?: boolean;
+
+  /**
+   * When true, force a fresh install of each package even if a satisfying version
+   * is already installed. Useful to pick up the latest patch or minor release.
+   */
+  upgrade?: boolean;
+
+  /**
+   * Optional callback called for each file event during extraction.
+   * Useful for progress reporting in scripts and build tools.
+   */
+  onProgress?: (event: ProgressEvent) => void;
 };
 
 /**
@@ -100,10 +126,16 @@ export type ConsumerResult = {
   modified: string[];
   deleted: string[];
   skipped: string[];
-  sourcePackage: {
+  sourcePackages: Array<{
     name: string;
     version: string;
-  };
+    changes: {
+      added: string[];
+      modified: string[];
+      deleted: string[];
+      skipped: string[];
+    };
+  }>;
 };
 
 /**
@@ -116,7 +148,7 @@ export type CheckResult = {
   ok: boolean;
 
   /**
-   * Files that differ from source
+   * Aggregated files that differ from source (across all packages)
    */
   differences: {
     /**
@@ -128,15 +160,38 @@ export type CheckResult = {
      * Files whose contents differ from the package source
      */
     modified: string[];
+
+    /**
+     * Files that exist in the package but have not been extracted yet
+     */
+    extra: string[];
   };
 
   /**
-   * Package information
+   * Per-package breakdown of differences
    */
-  sourcePackage: {
+  sourcePackages: Array<{
     name: string;
     version: string;
-  };
+    ok: boolean;
+    differences: {
+      missing: string[];
+      modified: string[];
+      extra: string[];
+    };
+  }>;
+};
+
+/**
+ * npmdata-specific configuration stored inside the publishable package.json
+ */
+export type NpmdataConfig = {
+  /**
+   * Additional package specs to include as data sources when the CLI script runs.
+   * Each entry is a bare package name ("my-pkg") or a name with a semver constraint
+   * ("my-pkg@^1.2.3"). These are merged with the package's own name when extracting.
+   */
+  additionalPackages?: string[];
 };
 
 /**
@@ -150,5 +205,6 @@ export type PublishablePackageJson = {
   bin?: string;
   files?: string[];
   dependencies?: Record<string, string>;
+  npmdata?: NpmdataConfig;
   [key: string]: unknown;
 };

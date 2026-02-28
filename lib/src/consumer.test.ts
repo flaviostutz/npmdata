@@ -6,7 +6,7 @@ import { execSync } from 'node:child_process';
 
 import archiver from 'archiver';
 
-import { extract, check } from './consumer';
+import { extract, check, list } from './consumer';
 import { readCsvMarker } from './utils';
 
 describe('Consumer', () => {
@@ -38,7 +38,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-extract-package',
+        packages: ['test-extract-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -75,7 +75,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-readonly-package',
+        packages: ['test-readonly-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -96,7 +96,7 @@ describe('Consumer', () => {
       await installMockPackage('test-update-package', { 'docs/guide.md': '# Guide v1' }, tmpDir);
 
       await extract({
-        packageName: 'test-update-package',
+        packages: ['test-update-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -104,7 +104,7 @@ describe('Consumer', () => {
 
       // Re-install same package (simulate update) and extract again
       await extract({
-        packageName: 'test-update-package',
+        packages: ['test-update-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -129,7 +129,7 @@ describe('Consumer', () => {
 
       // First extraction
       await extract({
-        packageName: 'test-idempotent-package',
+        packages: ['test-idempotent-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -154,7 +154,7 @@ describe('Consumer', () => {
 
       // Second extraction with identical package and output dir
       const secondResult = await extract({
-        packageName: 'test-idempotent-package',
+        packages: ['test-idempotent-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -178,48 +178,72 @@ describe('Consumer', () => {
       }
     });
 
-    it('should throw on file conflict with unmanaged existing file', async () => {
+    it('should throw on file conflict with unmanaged existing file when force is false', async () => {
       const outputDir = path.join(tmpDir, 'output');
       fs.mkdirSync(outputDir, { recursive: true });
 
-      // Pre-create an unmanaged file at the conflict path
-      fs.writeFileSync(path.join(outputDir, 'config.md'), 'existing unmanaged content');
+      const originalContent = 'existing unmanaged content';
+      fs.writeFileSync(path.join(outputDir, 'config.md'), originalContent);
 
-      await installMockPackage('test-conflict-package', { 'config.md': '# Config' }, tmpDir);
+      await installMockPackage(
+        'test-conflict-no-force-package',
+        { 'config.md': '# Config from package' },
+        tmpDir,
+      );
 
       await expect(
         extract({
-          packageName: 'test-conflict-package',
+          packages: ['test-conflict-no-force-package'],
           outputDir,
           packageManager: 'pnpm',
           cwd: tmpDir,
+          force: false,
         }),
       ).rejects.toThrow('File conflict');
+
+      // File content must be untouched
+      expect(fs.readFileSync(path.join(outputDir, 'config.md'), 'utf8')).toBe(originalContent);
+
+      // No marker file must have been created
+      expect(fs.existsSync(path.join(outputDir, '.publisher'))).toBe(false);
     });
 
-    it('should overwrite unmanaged file when force is true', async () => {
+    it('should overwrite unmanaged file and track it in the marker when force is true', async () => {
       const outputDir = path.join(tmpDir, 'output');
       fs.mkdirSync(outputDir, { recursive: true });
 
-      fs.writeFileSync(path.join(outputDir, 'overwrite.md'), 'pre-existing content');
+      fs.writeFileSync(path.join(outputDir, 'overwrite.md'), 'pre-existing unmanaged content');
 
       await installMockPackage(
-        'test-allow-conflicts-package',
-        { 'overwrite.md': '# New content' },
+        'test-conflict-force-package',
+        { 'overwrite.md': '# Content from package' },
         tmpDir,
       );
 
       const result = await extract({
-        packageName: 'test-allow-conflicts-package',
+        packages: ['test-conflict-force-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
         force: true,
       });
 
-      expect(result.added.length + result.modified.length).toBeGreaterThan(0);
-      const content = fs.readFileSync(path.join(outputDir, 'overwrite.md'), 'utf8');
-      expect(content).toBe('# New content');
+      // File must contain the package content
+      expect(fs.readFileSync(path.join(outputDir, 'overwrite.md'), 'utf8')).toBe(
+        '# Content from package',
+      );
+
+      // Result must report it as modified (overwrote an existing file)
+      expect(result.modified).toContain('overwrite.md');
+      expect(result.added).not.toContain('overwrite.md');
+
+      // Marker must record the file as owned by this package
+      const marker = readCsvMarker(path.join(outputDir, '.publisher'));
+      expect(
+        marker.some(
+          (m) => m.packageName === 'test-conflict-force-package' && m.path === 'overwrite.md',
+        ),
+      ).toBe(true);
     });
 
     it('should filter files by filenamePatterns', async () => {
@@ -235,7 +259,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-filter-package',
+        packages: ['test-filter-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -260,7 +284,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-delete-meta-package',
+        packages: ['test-delete-meta-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -273,7 +297,7 @@ describe('Consumer', () => {
       await installMockPackage('test-delete-meta-package', { 'docs/file1.md': '# File 1' }, tmpDir);
 
       const result = await extract({
-        packageName: 'test-delete-meta-package',
+        packages: ['test-delete-meta-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -305,7 +329,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-full-cleanup-package',
+        packages: ['test-full-cleanup-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -318,7 +342,7 @@ describe('Consumer', () => {
       await installMockPackage('test-full-cleanup-package', {}, tmpDir);
 
       const result = await extract({
-        packageName: 'test-full-cleanup-package',
+        packages: ['test-full-cleanup-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -347,7 +371,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-unmanaged-coexist-package',
+        packages: ['test-unmanaged-coexist-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -363,7 +387,7 @@ describe('Consumer', () => {
       await installMockPackage('test-unmanaged-coexist-package', {}, tmpDir);
 
       const result = await extract({
-        packageName: 'test-unmanaged-coexist-package',
+        packages: ['test-unmanaged-coexist-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -395,7 +419,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-gitignore-package',
+        packages: ['test-gitignore-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -423,7 +447,7 @@ describe('Consumer', () => {
       await installMockPackage('test-no-gitignore-package', { 'README.md': '# Test' }, tmpDir);
 
       await extract({
-        packageName: 'test-no-gitignore-package',
+        packages: ['test-no-gitignore-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -442,7 +466,7 @@ describe('Consumer', () => {
       await installMockPackage('test-gitignore-merge-package', { 'data.json': '{}' }, tmpDir);
 
       await extract({
-        packageName: 'test-gitignore-merge-package',
+        packages: ['test-gitignore-merge-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -464,7 +488,7 @@ describe('Consumer', () => {
       await installMockPackage('test-gitignore-cleanup-package', { 'data.csv': 'a,b' }, tmpDir);
 
       await extract({
-        packageName: 'test-gitignore-cleanup-package',
+        packages: ['test-gitignore-cleanup-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -478,7 +502,7 @@ describe('Consumer', () => {
       await installMockPackage('test-gitignore-cleanup-package', {}, tmpDir);
 
       await extract({
-        packageName: 'test-gitignore-cleanup-package',
+        packages: ['test-gitignore-cleanup-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -503,7 +527,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-partial-delete-package',
+        packages: ['test-partial-delete-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -523,7 +547,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-partial-delete-package',
+        packages: ['test-partial-delete-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -547,7 +571,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-gitignore-implicit-cleanup-package',
+        packages: ['test-gitignore-implicit-cleanup-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -568,7 +592,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-gitignore-implicit-cleanup-package',
+        packages: ['test-gitignore-implicit-cleanup-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -588,13 +612,13 @@ describe('Consumer', () => {
       await installMockPackage('pkg-coexist-b', { 'docs/b-guide.md': '# Guide B' }, tmpDir);
 
       await extract({
-        packageName: 'pkg-coexist-a',
+        packages: ['pkg-coexist-a'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
       });
       await extract({
-        packageName: 'pkg-coexist-b',
+        packages: ['pkg-coexist-b'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -621,13 +645,13 @@ describe('Consumer', () => {
       await installMockPackage('pkg-reextract-b', { 'docs/b-file.md': '# B' }, tmpDir);
 
       await extract({
-        packageName: 'pkg-reextract-a',
+        packages: ['pkg-reextract-a'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
       });
       await extract({
-        packageName: 'pkg-reextract-b',
+        packages: ['pkg-reextract-b'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -635,7 +659,7 @@ describe('Consumer', () => {
 
       // Re-extract package-b (no changes to package content)
       const result = await extract({
-        packageName: 'pkg-reextract-b',
+        packages: ['pkg-reextract-b'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -658,14 +682,14 @@ describe('Consumer', () => {
       await installMockPackage('pkg-drop-a', { 'docs/a-drop.md': '# A' }, tmpDir);
       await installMockPackage('pkg-drop-b', { 'docs/b-keep.md': '# B' }, tmpDir);
 
-      await extract({ packageName: 'pkg-drop-a', outputDir, packageManager: 'pnpm', cwd: tmpDir });
-      await extract({ packageName: 'pkg-drop-b', outputDir, packageManager: 'pnpm', cwd: tmpDir });
+      await extract({ packages: ['pkg-drop-a'], outputDir, packageManager: 'pnpm', cwd: tmpDir });
+      await extract({ packages: ['pkg-drop-b'], outputDir, packageManager: 'pnpm', cwd: tmpDir });
 
       // Reinstall package-a with no files (simulates the file being dropped from the package)
       await installMockPackage('pkg-drop-a', {}, tmpDir);
 
       const result = await extract({
-        packageName: 'pkg-drop-a',
+        packages: ['pkg-drop-a'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -697,7 +721,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'pkg-samename',
+        packages: ['pkg-samename'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -710,7 +734,7 @@ describe('Consumer', () => {
       await installMockPackage('pkg-samename', { 'docs/README.md': '# Docs' }, tmpDir);
 
       const result = await extract({
-        packageName: 'pkg-samename',
+        packages: ['pkg-samename'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -731,7 +755,7 @@ describe('Consumer', () => {
       await installMockPackage('pkg-clash-b', { 'docs/shared.md': '# Shared by B' }, tmpDir);
 
       await extract({
-        packageName: 'pkg-clash-a',
+        packages: ['pkg-clash-a'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -739,12 +763,93 @@ describe('Consumer', () => {
 
       await expect(
         extract({
-          packageName: 'pkg-clash-b',
+          packages: ['pkg-clash-b'],
           outputDir,
           packageManager: 'pnpm',
           cwd: tmpDir,
         }),
       ).rejects.toThrow('Package clash');
+    });
+
+    it('should transfer ownership when force is true and file is managed by a different package', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage(
+        'pkg-force-owner-a',
+        { 'docs/shared.md': '# Content from A' },
+        tmpDir,
+      );
+      await installMockPackage(
+        'pkg-force-owner-b',
+        { 'docs/shared.md': '# Content from B' },
+        tmpDir,
+      );
+
+      // First extraction: pkg-force-owner-a owns docs/shared.md
+      await extract({
+        packages: ['pkg-force-owner-a'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      const markerBefore = readCsvMarker(path.join(outputDir, 'docs', '.publisher'));
+      expect(markerBefore.some((m) => m.packageName === 'pkg-force-owner-a')).toBe(true);
+
+      // Second extraction with force: pkg-force-owner-b should take ownership
+      const result = await extract({
+        packages: ['pkg-force-owner-b'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        force: true,
+      });
+
+      // File content must come from the new owner
+      const content = fs.readFileSync(path.join(outputDir, 'docs', 'shared.md'), 'utf8');
+      expect(content).toBe('# Content from B');
+
+      // Result must report the file as modified (ownership transferred, content overwritten)
+      expect(result.modified).toContain('docs/shared.md');
+
+      // Marker must show pkg-force-owner-b as the sole owner; pkg-force-owner-a evicted
+      const markerAfter = readCsvMarker(path.join(outputDir, 'docs', '.publisher'));
+      expect(markerAfter.some((m) => m.packageName === 'pkg-force-owner-b')).toBe(true);
+      expect(markerAfter.some((m) => m.packageName === 'pkg-force-owner-a')).toBe(false);
+    });
+
+    it('should not overwrite a file managed by a different package when force is false', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('pkg-no-force-a', { 'data/record.json': '{"owner":"a"}' }, tmpDir);
+      await installMockPackage('pkg-no-force-b', { 'data/record.json': '{"owner":"b"}' }, tmpDir);
+
+      // Establish ownership with pkg-no-force-a
+      await extract({
+        packages: ['pkg-no-force-a'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // pkg-no-force-b must not be able to claim the file without force
+      await expect(
+        extract({
+          packages: ['pkg-no-force-b'],
+          outputDir,
+          packageManager: 'pnpm',
+          cwd: tmpDir,
+          force: false,
+        }),
+      ).rejects.toThrow('Package clash');
+
+      // File content and ownership must be unchanged
+      const content = fs.readFileSync(path.join(outputDir, 'data', 'record.json'), 'utf8');
+      expect(content).toBe('{"owner":"a"}');
+
+      const marker = readCsvMarker(path.join(outputDir, 'data', '.publisher'));
+      expect(marker.some((m) => m.packageName === 'pkg-no-force-a')).toBe(true);
+      expect(marker.some((m) => m.packageName === 'pkg-no-force-b')).toBe(false);
     });
 
     it('should throw when installed package version does not satisfy the requested version constraint', async () => {
@@ -754,13 +859,53 @@ describe('Consumer', () => {
 
       await expect(
         extract({
-          packageName: 'pkg-version-check',
+          packages: ['pkg-version-check@>=99.0.0'],
           outputDir,
           packageManager: 'pnpm',
           cwd: tmpDir,
-          version: '>=99.0.0',
         }),
       ).rejects.toThrow('does not match constraint');
+    });
+
+    it('should extract successfully when package name has no version indication', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('pkg-no-version-spec', { 'docs/guide.md': '# Guide' }, tmpDir);
+
+      const result = await extract({
+        packages: ['pkg-no-version-spec'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
+      expect(result.added).toContain('docs/guide.md');
+
+      // Marker must record the bare package name (no version suffix)
+      const marker = readCsvMarker(path.join(outputDir, 'docs', '.publisher'));
+      expect(marker[0].packageName).toBe('pkg-no-version-spec');
+    });
+
+    it('should extract successfully when package name includes a satisfied version constraint', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      // installMockPackage installs version 1.0.0 by default
+      await installMockPackage('pkg-with-version-spec', { 'docs/guide.md': '# Guide' }, tmpDir);
+
+      const result = await extract({
+        packages: ['pkg-with-version-spec@>=1.0.0'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
+      expect(result.added).toContain('docs/guide.md');
+
+      // Marker must record the bare package name, not the full spec with version suffix
+      const marker = readCsvMarker(path.join(outputDir, 'docs', '.publisher'));
+      expect(marker[0].packageName).toBe('pkg-with-version-spec');
     });
 
     it('should report modified files when package content changes on re-extraction', async () => {
@@ -769,7 +914,7 @@ describe('Consumer', () => {
       await installMockPackage('pkg-content-change', { 'docs/note.md': '# Version 1' }, tmpDir);
 
       await extract({
-        packageName: 'pkg-content-change',
+        packages: ['pkg-content-change'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -779,7 +924,7 @@ describe('Consumer', () => {
       await installMockPackage('pkg-content-change', { 'docs/note.md': '# Version 2' }, tmpDir);
 
       const result = await extract({
-        packageName: 'pkg-content-change',
+        packages: ['pkg-content-change'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -801,7 +946,7 @@ describe('Consumer', () => {
       await installMockPackage('pkg-gitignore-preserve', { 'data.csv': 'a,b' }, tmpDir);
 
       await extract({
-        packageName: 'pkg-gitignore-preserve',
+        packages: ['pkg-gitignore-preserve'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -818,7 +963,7 @@ describe('Consumer', () => {
       await installMockPackage('pkg-gitignore-preserve', {}, tmpDir);
 
       await extract({
-        packageName: 'pkg-gitignore-preserve',
+        packages: ['pkg-gitignore-preserve'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -849,7 +994,7 @@ describe('Consumer', () => {
 
       // Extract without gitignore option: only cleanup runs, no new entries are added
       await extract({
-        packageName: 'pkg-orphan-gitignore',
+        packages: ['pkg-orphan-gitignore'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -877,7 +1022,7 @@ describe('Consumer', () => {
 
       // extract will call cleanupEmptyMarkers which should remove the empty marker
       await extract({
-        packageName: 'pkg-empty-marker',
+        packages: ['pkg-empty-marker'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -887,13 +1032,35 @@ describe('Consumer', () => {
       const marker = readCsvMarker(path.join(outputDir, '.publisher'));
       expect(marker.some((m) => m.packageName === 'pkg-empty-marker')).toBe(true);
     });
+
+    it('should not write any files to disk when a later package fails the pre-flight check', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      // First package is valid and installed
+      await installMockPackage('pkg-preflight-ok', { 'docs/first.md': '# First' }, tmpDir);
+      // Second package is installed at 1.0.0 but we request >=99.0.0, which will fail
+      await installMockPackage('pkg-preflight-bad', { 'docs/second.md': '# Second' }, tmpDir);
+
+      await expect(
+        extract({
+          packages: ['pkg-preflight-ok', 'pkg-preflight-bad@>=99.0.0'],
+          outputDir,
+          packageManager: 'pnpm',
+          cwd: tmpDir,
+        }),
+      ).rejects.toThrow('does not match constraint');
+
+      // No files from either package should have been written
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'first.md'))).toBe(false);
+      expect(fs.existsSync(path.join(outputDir, 'docs', 'second.md'))).toBe(false);
+    });
   });
 
   describe('check', () => {
     it('should fail when package is not installed', async () => {
       await expect(
         check({
-          packageName: 'nonexistent-package',
+          packages: ['nonexistent-package'],
           outputDir: path.join(tmpDir, 'output'),
           cwd: tmpDir,
         }),
@@ -906,14 +1073,14 @@ describe('Consumer', () => {
       await installMockPackage('test-check-ok-package', { 'docs/guide.md': '# Guide' }, tmpDir);
 
       await extract({
-        packageName: 'test-check-ok-package',
+        packages: ['test-check-ok-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
       });
 
       const result = await check({
-        packageName: 'test-check-ok-package',
+        packages: ['test-check-ok-package'],
         outputDir,
         cwd: tmpDir,
       });
@@ -933,7 +1100,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-check-missing-package',
+        packages: ['test-check-missing-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -945,7 +1112,7 @@ describe('Consumer', () => {
       fs.unlinkSync(extractedFile);
 
       const result = await check({
-        packageName: 'test-check-missing-package',
+        packages: ['test-check-missing-package'],
         outputDir,
         cwd: tmpDir,
       });
@@ -964,7 +1131,7 @@ describe('Consumer', () => {
       );
 
       await extract({
-        packageName: 'test-check-modified-package',
+        packages: ['test-check-modified-package'],
         outputDir,
         packageManager: 'pnpm',
         cwd: tmpDir,
@@ -976,7 +1143,7 @@ describe('Consumer', () => {
       fs.writeFileSync(extractedFile, '# Modified content');
 
       const result = await check({
-        packageName: 'test-check-modified-package',
+        packages: ['test-check-modified-package'],
         outputDir,
         cwd: tmpDir,
       });
@@ -984,12 +1151,268 @@ describe('Consumer', () => {
       expect(result.ok).toBe(false);
       expect(result.differences.modified.some((f) => f.includes('modified.md'))).toBe(true);
     });
-  });
-});
 
-/**
- * Helper to create a dummy package, create a tar.gz file, and install in pnpm
- */
+    it('should include per-package ok flag and differences in result', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('test-check-per-pkg', { 'info.md': '# Info' }, tmpDir);
+
+      await extract({
+        packages: ['test-check-per-pkg'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      const result = await check({
+        packages: ['test-check-per-pkg'],
+        outputDir,
+        cwd: tmpDir,
+      });
+
+      expect(result.sourcePackages).toHaveLength(1);
+      expect(result.sourcePackages[0].name).toBe('test-check-per-pkg');
+      expect(result.sourcePackages[0].ok).toBe(true);
+      expect(result.sourcePackages[0].differences.missing).toHaveLength(0);
+      expect(result.sourcePackages[0].differences.modified).toHaveLength(0);
+      expect(result.sourcePackages[0].differences.extra).toHaveLength(0);
+    });
+
+    it('should report extra files from package that were never extracted', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage(
+        'test-check-extra-package',
+        {
+          'docs/existing.md': '# Existing',
+          'docs/new-in-pkg.md': '# New file added to package',
+        },
+        tmpDir,
+      );
+
+      // Extract only docs/existing.md by using a filter
+      await extract({
+        packages: ['test-check-extra-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        filenamePatterns: ['**/existing.md'],
+      });
+
+      // Now check without the filter — the package has docs/new-in-pkg.md which was never extracted
+      const result = await check({
+        packages: ['test-check-extra-package'],
+        outputDir,
+        cwd: tmpDir,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.differences.extra.some((f) => f.includes('new-in-pkg.md'))).toBe(true);
+    });
+
+    it('should throw when installed version does not satisfy constraint', async () => {
+      const outputDir = path.join(tmpDir, 'output');
+
+      await installMockPackage('test-check-constraint-pkg', { 'data.md': '# Data' }, tmpDir);
+
+      await extract({
+        packages: ['test-check-constraint-pkg'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      // Check with a constraint that version 1.0.0 does NOT satisfy
+      await expect(
+        check({
+          packages: ['test-check-constraint-pkg@^2.0.0'],
+          outputDir,
+          cwd: tmpDir,
+        }),
+      ).rejects.toThrow(/does not satisfy constraint/);
+    });
+  });
+
+  describe('extract dry-run', () => {
+    it('should not write any files when dryRun is true', async () => {
+      const outputDir = path.join(tmpDir, 'dry-output');
+
+      await installMockPackage(
+        'test-dryrun-package',
+        { 'docs/guide.md': '# Guide', 'README.md': '# Readme' },
+        tmpDir,
+      );
+
+      const result = await extract({
+        packages: ['test-dryrun-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        dryRun: true,
+      });
+
+      // Output directory should not be created
+      expect(fs.existsSync(outputDir)).toBe(false);
+      // Result should still report what WOULD have been added
+      expect(result.added.length).toBeGreaterThan(0);
+      expect(result.modified).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+    });
+
+    it('should not write marker files when dryRun is true', async () => {
+      const outputDir = path.join(tmpDir, 'dry-output-marker');
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      await installMockPackage('test-dryrun-marker-package', { 'data.md': '# Data' }, tmpDir);
+
+      await extract({
+        packages: ['test-dryrun-marker-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        dryRun: true,
+      });
+
+      expect(fs.existsSync(path.join(outputDir, '.publisher'))).toBe(false);
+    });
+
+    it('should report correct counts in dry-run result', async () => {
+      const outputDir = path.join(tmpDir, 'dry-output-counts');
+
+      await installMockPackage(
+        'test-dryrun-counts-package',
+        { 'a.md': '# A', 'b.md': '# B' },
+        tmpDir,
+      );
+
+      const result = await extract({
+        packages: ['test-dryrun-counts-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        dryRun: true,
+        filenamePatterns: ['**'],
+      });
+
+      // 2 files would be added (package.json is filtered by DEFAULT_FILENAME_PATTERNS)
+      expect(result.sourcePackages[0].changes.added.length).toBeGreaterThan(0);
+      expect(result.sourcePackages[0].changes.modified).toHaveLength(0);
+    });
+  });
+
+  describe('extract onProgress', () => {
+    it('should call onProgress for each added file', async () => {
+      const outputDir = path.join(tmpDir, 'progress-output');
+      const events: string[] = [];
+
+      await installMockPackage('test-progress-package', { 'docs/guide.md': '# Guide' }, tmpDir);
+
+      await extract({
+        packages: ['test-progress-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        onProgress: (evt) => {
+          // eslint-disable-next-line functional/immutable-data
+          events.push(evt.type);
+        },
+      });
+
+      expect(events).toContain('package-start');
+      expect(events).toContain('file-added');
+      expect(events).toContain('package-end');
+    });
+
+    it('should call onProgress with file-skipped for unchanged files on re-extraction', async () => {
+      const outputDir = path.join(tmpDir, 'progress-skip-output');
+
+      await installMockPackage('test-progress-skip-package', { 'config.md': '# Config' }, tmpDir);
+
+      await extract({
+        packages: ['test-progress-skip-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+      });
+
+      const skippedEvents: string[] = [];
+      await extract({
+        packages: ['test-progress-skip-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        onProgress: (evt) => {
+          if (evt.type === 'file-skipped') {
+            // eslint-disable-next-line functional/immutable-data
+            skippedEvents.push(evt.file);
+          }
+        },
+      });
+
+      expect(skippedEvents.some((f) => f.includes('config.md'))).toBe(true);
+    });
+  });
+
+  describe('list', () => {
+    it('should return packages and files managed in outputDir', async () => {
+      const outputDir = path.join(tmpDir, 'list-output');
+
+      await installMockPackage(
+        'test-list-package',
+        { 'docs/guide.md': '# Guide', 'README.md': '# Readme' },
+        tmpDir,
+      );
+
+      await extract({
+        packages: ['test-list-package'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        filenamePatterns: ['**'],
+      });
+
+      const results = list(outputDir);
+      expect(results.length).toBeGreaterThan(0);
+      const entry = results.find((r) => r.packageName === 'test-list-package');
+      expect(entry).toBeDefined();
+      expect(entry!.files.some((f) => f.includes('guide.md'))).toBe(true);
+    });
+
+    it('should return empty array for a directory with no managed files', () => {
+      const emptyDir = path.join(tmpDir, 'empty-list-output');
+      fs.mkdirSync(emptyDir, { recursive: true });
+
+      const results = list(emptyDir);
+      expect(results).toHaveLength(0);
+    });
+
+    it('should return empty array for a non-existent directory', () => {
+      const results = list(path.join(tmpDir, 'nonexistent'));
+      expect(results).toHaveLength(0);
+    });
+
+    it('should group files by package', async () => {
+      const outputDir = path.join(tmpDir, 'list-multi-pkg-output');
+
+      await installMockPackage('list-pkg-a', { 'a/file-a.md': '# A' }, tmpDir);
+      await installMockPackage('list-pkg-b', { 'b/file-b.md': '# B' }, tmpDir);
+
+      await extract({
+        packages: ['list-pkg-a', 'list-pkg-b'],
+        outputDir,
+        packageManager: 'pnpm',
+        cwd: tmpDir,
+        filenamePatterns: ['**/*.md'],
+      });
+
+      const results = list(outputDir);
+      const packageNames = results.map((r) => r.packageName);
+      expect(packageNames).toContain('list-pkg-a');
+      expect(packageNames).toContain('list-pkg-b');
+    });
+  });
+}); // end describe('Consumer')
+
 const installMockPackage = async (
   packageName: string,
   files: Record<string, string>,

@@ -1,5 +1,5 @@
 // Main exports
-export { extract, check } from './consumer';
+export { extract, check, list } from './consumer';
 export { initPublisher } from './publisher';
 
 // Type exports
@@ -9,5 +9,9 @@ export type {
   FileFilterConfig,
   ManagedFileMetadata,
   PublishablePackageJson,
+  ConsumerResult,
+  CheckResult,
+  ProgressEvent,
 } from './types';
 export type { PublisherInitOptions, InitResult } from './publisher';
+export { parsePackageSpec, isBinaryFile } from './utils';

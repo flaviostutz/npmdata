@@ -3,22 +3,55 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { readJsonFile, writeJsonFile } from './utils';
+import { readJsonFile, writeJsonFile, parsePackageSpec } from './utils';
 import { PublishablePackageJson } from './types';
+
+/**
+ * Read the version of the currently running npmdata package so we can pin it
+ * in the generated package.json rather than using 'latest'.
+ */
+function getOwnVersion(): string {
+  // eslint-disable-next-line functional/no-try-statements
+  try {
+    const ownPkg = readJsonFile<{ version: string }>(path.join(__dirname, '../package.json'));
+    return `^${ownPkg.version}`;
+  } catch {
+    return 'latest';
+  }
+}
 
 export type PublisherInitOptions = {
   /**
    * Working directory where to initialize (default: current working directory)
    */
   workingDir?: string;
+
+  /**
+   * Additional package specs to include as data sources alongside this package.
+   * Each entry is a bare package name ("my-pkg") or a name with a semver constraint
+   * ("my-pkg@^1.2.3"). They will be listed in package.json under `npmdata.additionalPackages`
+   * and added to `dependencies`, so the generated CLI script will extract data from all of
+   * them together with the data contained in the package being initialized.
+   */
+  additionalPackages?: string[];
 };
 
 export type InitResult = {
   success: boolean;
   message: string;
   publishedFolders?: string[];
+  additionalPackages?: string[];
   packageJsonPath?: string;
 };
+
+/**
+ * Parse a package spec like "pkg@^1.0.0" or "@scope/pkg@2.x" into name and version.
+ * Delegates to the shared utility; keeps 'latest' as default when no version is given.
+ */
+function parsePublisherPackageSpec(spec: string): { name: string; version: string } {
+  const { name, version } = parsePackageSpec(spec);
+  return { name, version: version ?? 'latest' };
+}
 
 function validateFolders(
   folders: string[],
@@ -46,7 +79,11 @@ require('npmdata/dist/runner.js').run(__dirname);
 `;
 }
 
-function preparePackageJson(folders: string[], workingDir: string): PublishablePackageJson {
+function preparePackageJson(
+  folders: string[],
+  workingDir: string,
+  additionalPackages: string[] = [],
+): PublishablePackageJson {
   const packageJsonPath = path.join(workingDir, 'package.json');
 
   // eslint-disable-next-line functional/no-let
@@ -84,7 +121,22 @@ function preparePackageJson(folders: string[], workingDir: string): PublishableP
   if (!packageJson.dependencies) {
     packageJson.dependencies = {};
   }
-  packageJson.dependencies.npmdata = 'latest';
+  packageJson.dependencies.npmdata = getOwnVersion();
+
+  // Merge additional packages: preserve existing entries, add new ones without duplicates
+  const existingAdditional = packageJson.npmdata?.additionalPackages ?? [];
+  const mergedAdditional = Array.from(new Set([...existingAdditional, ...additionalPackages]));
+
+  // Store additional packages config and add them to dependencies
+  if (mergedAdditional.length > 0) {
+    packageJson.npmdata = { ...packageJson.npmdata, additionalPackages: mergedAdditional };
+    for (const pkgSpec of mergedAdditional) {
+      const { name: pkgName, version: pkgVersion } = parsePublisherPackageSpec(pkgSpec);
+      if (!packageJson.dependencies[pkgName]) {
+        packageJson.dependencies[pkgName] = pkgVersion;
+      }
+    }
+  }
 
   if (!packageJson.bin) {
     packageJson.bin = 'bin/npmdata.js';
@@ -101,6 +153,7 @@ export async function initPublisher(
   options: PublisherInitOptions = {},
 ): Promise<InitResult> {
   const workingDir = options.workingDir ?? process.cwd();
+  const additionalPackages = options.additionalPackages ?? [];
 
   // eslint-disable-next-line functional/no-try-statements
   try {
@@ -119,7 +172,7 @@ export async function initPublisher(
       };
     }
 
-    const packageJson = preparePackageJson(folders, workingDir);
+    const packageJson = preparePackageJson(folders, workingDir, additionalPackages);
     const packageJsonPath = path.join(workingDir, 'package.json');
     writeJsonFile(packageJsonPath, packageJson);
 
@@ -128,10 +181,13 @@ export async function initPublisher(
     fs.writeFileSync(cliScriptPath, generateCliScript(), 'utf8');
     fs.chmodSync(cliScriptPath, 0o755);
 
+    const finalAdditionalPackages = packageJson.npmdata?.additionalPackages;
+
     return {
       success: true,
       message: 'npmdata: project initialization completed successfully',
       publishedFolders: folders,
+      additionalPackages: finalAdditionalPackages,
       packageJsonPath,
     };
   } catch (error) {

@@ -7,6 +7,37 @@ import { minimatch } from 'minimatch';
 import { ManagedFileMetadata } from './types';
 
 /**
+ * Parse a package spec like "my-pkg@^1.2.3" or "@scope/pkg@2.x" into name and version.
+ * The version separator is the LAST "@" so that scoped packages ("@scope/name") are handled correctly.
+ */
+export function parsePackageSpec(spec: string): { name: string; version: string | undefined } {
+  const atIdx = spec.lastIndexOf('@');
+  if (atIdx > 0) {
+    // eslint-disable-next-line no-undefined
+    return { name: spec.slice(0, atIdx), version: spec.slice(atIdx + 1) || undefined };
+  }
+  // eslint-disable-next-line no-undefined
+  return { name: spec, version: undefined };
+}
+
+/**
+ * Detect whether a file is binary by scanning it for null bytes.
+ * Reads up to the first 8 KB only to keep memory usage low.
+ */
+export function isBinaryFile(filePath: string): boolean {
+  // eslint-disable-next-line functional/no-try-statements
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(8192);
+    const bytesRead = fs.readSync(fd, buf, 0, 8192, 0);
+    fs.closeSync(fd);
+    return buf.slice(0, bytesRead).includes(0x00);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get hash of file contents
  */
 export function calculateFileHash(filePath: string): string {
@@ -15,10 +46,12 @@ export function calculateFileHash(filePath: string): string {
 }
 
 /**
- * Check if file contents match regex patterns
+ * Check if file contents match regex patterns.
+ * Binary files (detected via null-byte scan) are always excluded when patterns are set.
  */
 export function matchesContentRegex(filePath: string, patterns?: RegExp[]): boolean {
   if (!patterns) return true;
+  if (isBinaryFile(filePath)) return false;
   const content = fs.readFileSync(filePath, 'utf8');
   return patterns.some((pattern) => pattern.test(content));
 }
@@ -69,10 +102,12 @@ export const matchesFilenamePattern = (filename: string, patterns?: string[]): b
   const includes = patterns.filter((p) => !p.startsWith('!'));
   const excludes = patterns.filter((p) => p.startsWith('!')).map((p) => p.slice(1));
 
-  return (
-    includes.some((pattern) => minimatch(filename, pattern)) &&
-    !excludes.some((pattern) => minimatch(filename, pattern))
-  );
+  // When there are no positive include patterns, treat as "match all" (same as undefined).
+  // This avoids the footgun where an empty array silently excludes every file.
+  const matchesIncludes =
+    includes.length === 0 || includes.some((pattern) => minimatch(filename, pattern));
+
+  return matchesIncludes && !excludes.some((pattern) => minimatch(filename, pattern));
 };
 
 /**
@@ -105,12 +140,14 @@ export function copyFile(src: string, dest: string): void {
 }
 
 /**
- * Detect package manager type
+ * Detect package manager type.
+ * Inspects the lock files in the given directory (defaults to process.cwd()).
  */
-export function detectPackageManager(): 'npm' | 'yarn' | 'pnpm' {
+export function detectPackageManager(cwd?: string): 'npm' | 'yarn' | 'pnpm' {
+  const dir = cwd ?? '.';
   // eslint-disable-next-line functional/no-try-statements
   try {
-    const lockFiles = fs.readdirSync('.');
+    const lockFiles = fs.readdirSync(dir);
     if (lockFiles.includes('pnpm-lock.yaml')) return 'pnpm';
     if (lockFiles.includes('yarn.lock')) return 'yarn';
     if (lockFiles.includes('package-lock.json')) return 'npm';
@@ -168,25 +205,31 @@ export function writeJsonFile(filePath: string, data: unknown): void {
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 }
 
+const MARKER_DELIMITER = '|';
+
 /**
- * Read the .publisher CSV marker file
+ * Read the .publisher marker file.
+ * Supports both the current pipe-delimited format and the legacy comma-delimited format
+ * (detected automatically for backward compatibility).
  */
 export function readCsvMarker(filePath: string): ManagedFileMetadata[] {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.split('\n').filter((line) => line.trim() !== '');
   return lines.map((line) => {
-    const fields = line.split(',');
+    // Detect format: new records use '|'; legacy records use ','
+    const delimiter = line.includes(MARKER_DELIMITER) ? MARKER_DELIMITER : ',';
+    const fields = line.split(delimiter);
     return {
       path: fields[0],
       packageName: fields[1],
       packageVersion: fields[2],
-      force: fields[3] === 'true',
+      force: fields[3] === '1',
     };
   });
 }
 
 /**
- * Write the .publisher CSV marker file
+ * Write the .publisher marker file using the pipe-delimited format.
  */
 export function writeCsvMarker(filePath: string, data: ManagedFileMetadata[]): void {
   ensureDir(path.dirname(filePath));
@@ -194,7 +237,7 @@ export function writeCsvMarker(filePath: string, data: ManagedFileMetadata[]): v
     fs.chmodSync(filePath, 0o644);
   }
   const rows = data.map((m) =>
-    [m.path, m.packageName, m.packageVersion, m.force ? 'true' : 'false'].join(','),
+    [m.path, m.packageName, m.packageVersion, m.force ? '1' : '0'].join(MARKER_DELIMITER),
   );
   fs.writeFileSync(filePath, `${rows.join('\n')}\n`, 'utf8');
   fs.chmodSync(filePath, 0o444);

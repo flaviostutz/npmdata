@@ -21,12 +21,12 @@ This document covers the internal architecture for contributors working on this 
 
 `extract()` flow:
 1. Detects the package manager (`pnpm` / `yarn` / `npm`) via lock-file presence.
-2. Runs `<pm> add <package>@<version>` in a temp location to resolve the package.
-3. Iterates matching files (glob + optional content regex) from the installed package.
+2. For each entry in `config.packages`, parses the spec (`name` or `name@version`) and runs `<pm> add <package>@<version>` to resolve the package.
+3. Iterates matching files (glob + optional content regex) from each installed package.
 4. Copies files into `outputDir`, tracking state in a `.publisher` CSV marker file per output directory.
 5. Optionally writes a `.gitignore` section around the managed files.
 
-`check()` performs the same resolution but compares SHA-256 hashes without writing any files.
+`check()` performs the same resolution for each package in `config.packages` but compares SHA-256 hashes without writing any files.
 
 ## Marker file (`.publisher`)
 

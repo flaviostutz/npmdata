@@ -15,7 +15,12 @@ import {
   getInstalledPackageVersion,
   readJsonFile,
   writeJsonFile,
+  parsePackageSpec,
+  isBinaryFile,
+  readCsvMarker,
+  writeCsvMarker,
 } from './utils';
+import { ManagedFileMetadata } from './types';
 
 describe('Utils', () => {
   // eslint-disable-next-line functional/no-let
@@ -36,7 +41,9 @@ describe('Utils', () => {
       expect(matchesFilenamePattern('test/file.md', ['**/*.md'])).toBe(true);
       expect(matchesFilenamePattern('file.txt', ['*.md'])).toBe(false);
       expect(matchesFilenamePattern('README.md', ['README.md'])).toBe(true);
-      expect(matchesFilenamePattern('bin/test.js', ['!bin'])).toBe(false);
+      // exclude-only pattern, no include: matches everything not excluded
+      expect(matchesFilenamePattern('bin/test.js', ['!bin/**'])).toBe(false);
+      expect(matchesFilenamePattern('src/index.ts', ['!bin/**'])).toBe(true);
     });
 
     it('should match multiple patterns', () => {
@@ -49,8 +56,12 @@ describe('Utils', () => {
       expect(matchesFilenamePattern('bin/file.js', ['**/*.js', '!bin/**'])).toBe(false);
     });
 
-    it('should return false if no pattern specified', () => {
-      expect(matchesFilenamePattern('anything.txt', [])).toBe(false);
+    it('should return true for an empty or exclude-only patterns array', () => {
+      // Empty array: behaves like undefined (match all)
+      expect(matchesFilenamePattern('anything.txt', [])).toBe(true);
+      // Only exclude patterns: match everything not excluded
+      expect(matchesFilenamePattern('src/file.ts', ['!bin/**'])).toBe(true);
+      expect(matchesFilenamePattern('bin/script.js', ['!bin/**'])).toBe(false);
     });
 
     it('should return true when patterns is undefined', () => {
@@ -364,6 +375,146 @@ describe('Utils', () => {
 
       const result = JSON.parse(fs.readFileSync(filePath).toString());
       expect(result.updated).toBe(true);
+    });
+  });
+
+  describe('parsePackageSpec', () => {
+    it('should parse a plain package name with no version', () => {
+      const result = parsePackageSpec('my-pkg');
+      expect(result.name).toBe('my-pkg');
+      expect(result.version).toBeUndefined();
+    });
+
+    it('should parse a package name with semver constraint', () => {
+      const result = parsePackageSpec('my-pkg@^1.2.3');
+      expect(result.name).toBe('my-pkg');
+      expect(result.version).toBe('^1.2.3');
+    });
+
+    it('should handle scoped packages with no version', () => {
+      const result = parsePackageSpec('@my-org/my-pkg');
+      expect(result.name).toBe('@my-org/my-pkg');
+      expect(result.version).toBeUndefined();
+    });
+
+    it('should handle scoped packages with a version', () => {
+      const result = parsePackageSpec('@my-org/my-pkg@2.x');
+      expect(result.name).toBe('@my-org/my-pkg');
+      expect(result.version).toBe('2.x');
+    });
+
+    it('should return undefined version for empty version string', () => {
+      // "pkg@" with nothing after the @ - version should be undefined/empty
+      const result = parsePackageSpec('my-pkg@');
+      expect(result.name).toBe('my-pkg');
+      expect(result.version).toBeUndefined();
+    });
+  });
+
+  describe('isBinaryFile', () => {
+    it('should return false for a plain text file', () => {
+      const filePath = path.join(tmpDir, 'text.md');
+      fs.writeFileSync(filePath, '# Hello World\nThis is text.');
+      expect(isBinaryFile(filePath)).toBe(false);
+    });
+
+    it('should return true for a file containing null bytes', () => {
+      const filePath = path.join(tmpDir, 'binary.bin');
+      // eslint-disable-next-line unicorn/number-literal-case
+      const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0a]);
+      fs.writeFileSync(filePath, buf);
+      expect(isBinaryFile(filePath)).toBe(true);
+    });
+
+    it('should return false for a non-existent file', () => {
+      expect(isBinaryFile(path.join(tmpDir, 'does-not-exist.bin'))).toBe(false);
+    });
+  });
+
+  describe('matchesContentRegex with binary files', () => {
+    it('should return false for a binary file even if pattern would match text', () => {
+      const filePath = path.join(tmpDir, 'mixed.bin');
+      // Create a file that starts with a null byte (binary marker) but also contains text
+      const buf = Buffer.concat([Buffer.from([0x00]), Buffer.from('match-this')]);
+      fs.writeFileSync(filePath, buf);
+      expect(matchesContentRegex(filePath, [/match-this/])).toBe(false);
+    });
+  });
+
+  describe('detectPackageManager with cwd', () => {
+    it('should detect pnpm via pnpm-lock.yaml in given cwd', () => {
+      fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+      expect(detectPackageManager(tmpDir)).toBe('pnpm');
+    });
+
+    it('should detect yarn via yarn.lock in given cwd', () => {
+      fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
+      expect(detectPackageManager(tmpDir)).toBe('yarn');
+    });
+
+    it('should detect npm via package-lock.json in given cwd', () => {
+      fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '{}');
+      expect(detectPackageManager(tmpDir)).toBe('npm');
+    });
+  });
+
+  describe('readCsvMarker / writeCsvMarker', () => {
+    const sampleData: ManagedFileMetadata[] = [
+      { path: 'file.md', packageName: 'my-pkg', packageVersion: '1.0.0', force: false },
+      { path: 'docs/guide.md', packageName: 'my-pkg', packageVersion: '1.0.0', force: true },
+    ];
+
+    it('should write and read back marker data with pipe delimiter', () => {
+      const markerPath = path.join(tmpDir, '.publisher');
+      writeCsvMarker(markerPath, sampleData);
+
+      const content = fs.readFileSync(markerPath, 'utf8');
+      // Ensure pipe delimiter is used
+      expect(content).toContain('|');
+      expect(content).not.toMatch(/file\.md,my-pkg/); // should not use comma as delimiter
+
+      const result = readCsvMarker(markerPath);
+      expect(result).toHaveLength(2);
+      expect(result[0].path).toBe('file.md');
+      expect(result[0].packageName).toBe('my-pkg');
+      expect(result[0].force).toBe(false);
+      expect(result[1].path).toBe('docs/guide.md');
+      expect(result[1].force).toBe(true);
+    });
+
+    it('should handle file paths that contain commas (via pipe format)', () => {
+      const data: ManagedFileMetadata[] = [
+        { path: 'my,file.md', packageName: 'pkg', packageVersion: '1.0.0', force: false },
+      ];
+      const markerPath = path.join(tmpDir, '.publisher');
+      writeCsvMarker(markerPath, data);
+
+      const result = readCsvMarker(markerPath);
+      expect(result[0].path).toBe('my,file.md');
+      expect(result[0].packageName).toBe('pkg');
+    });
+
+    it('should read legacy comma-delimited marker files for backward compatibility', () => {
+      const markerPath = path.join(tmpDir, '.publisher');
+      // Write legacy comma-delimited format without pipe characters
+      fs.writeFileSync(markerPath, 'old-file.md,old-pkg,2.0.0,0\n', 'utf8');
+      fs.chmodSync(markerPath, 0o444);
+
+      const result = readCsvMarker(markerPath);
+      expect(result[0].path).toBe('old-file.md');
+      expect(result[0].packageName).toBe('old-pkg');
+      expect(result[0].packageVersion).toBe('2.0.0');
+      expect(result[0].force).toBe(false);
+    });
+
+    it('should make the marker file read-only after writing', () => {
+      const markerPath = path.join(tmpDir, '.publisher');
+      writeCsvMarker(markerPath, sampleData);
+
+      const stats = fs.statSync(markerPath);
+      // eslint-disable-next-line no-bitwise
+      const isWritable = (stats.mode & 0o222) !== 0;
+      expect(isWritable).toBe(false);
     });
   });
 });

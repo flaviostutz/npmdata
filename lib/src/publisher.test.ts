@@ -67,7 +67,7 @@ describe('Publisher', () => {
       expect(pkgJson.files).toContain('docs/**');
       expect(pkgJson.files).toContain('package.json');
       expect(pkgJson.files).toContain('bin/npmdata.js');
-      expect(pkgJson.dependencies.npmdata).toBe('latest');
+      expect(pkgJson.dependencies.npmdata).toMatch(/^\^\d+\.\d+\.\d+$/);
       expect(pkgJson.bin).toBe('bin/npmdata.js');
       expect(pkgJson.name).toBe(path.basename(tmpDir));
       expect(pkgJson.version).toBe('1.0.0');
@@ -175,7 +175,10 @@ describe('Publisher', () => {
       await initPublisher(['docs'], { workingDir: tmpDir });
 
       const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
-      expect(pkgJson.dependencies.npmdata).toBe('latest');
+      // Should be pinned to actual version (^x.y.z) rather than 'latest'
+      expect(pkgJson.dependencies.npmdata).toMatch(/^\^?\d+\.\d+\.\d+|^latest$/);
+      // Should NOT be the literal string 'latest'
+      expect(pkgJson.dependencies.npmdata).not.toBe('latest');
     });
 
     it('should preserve existing bin field if set', async () => {
@@ -204,6 +207,95 @@ describe('Publisher', () => {
 
       const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
       expect(pkgJson.name).toBe(path.basename(tmpDir));
+    });
+
+    it('should store additional packages in package.json npmdata field', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+      const result = await initPublisher(['docs'], {
+        workingDir: tmpDir,
+        additionalPackages: ['shared-data@^1.0.0', 'other-pkg'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.additionalPackages).toEqual(['shared-data@^1.0.0', 'other-pkg']);
+
+      const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
+      expect(pkgJson.npmdata.additionalPackages).toEqual(['shared-data@^1.0.0', 'other-pkg']);
+    });
+
+    it('should add additional packages to dependencies', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+      await initPublisher(['docs'], {
+        workingDir: tmpDir,
+        additionalPackages: ['shared-data@^1.0.0', 'other-pkg'],
+      });
+
+      const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
+      expect(pkgJson.dependencies['shared-data']).toBe('^1.0.0');
+      expect(pkgJson.dependencies['other-pkg']).toBe('latest');
+    });
+
+    it('should not duplicate additional packages on re-init', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+      await initPublisher(['docs'], {
+        workingDir: tmpDir,
+        additionalPackages: ['shared-data@^1.0.0'],
+      });
+      await initPublisher(['docs'], {
+        workingDir: tmpDir,
+        additionalPackages: ['shared-data@^1.0.0'],
+      });
+
+      const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
+      const matches = pkgJson.npmdata.additionalPackages.filter(
+        (p: string) => p === 'shared-data@^1.0.0',
+      );
+      expect(matches).toHaveLength(1);
+    });
+
+    it('should merge additional packages on re-init', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+      await initPublisher(['docs'], {
+        workingDir: tmpDir,
+        additionalPackages: ['pkg-a'],
+      });
+      await initPublisher(['docs'], {
+        workingDir: tmpDir,
+        additionalPackages: ['pkg-b'],
+      });
+
+      const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
+      expect(pkgJson.npmdata.additionalPackages).toContain('pkg-a');
+      expect(pkgJson.npmdata.additionalPackages).toContain('pkg-b');
+    });
+
+    it('should handle scoped package names in additionalPackages', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+      await initPublisher(['docs'], {
+        workingDir: tmpDir,
+        additionalPackages: ['@my-org/shared-data@^2.0.0'],
+      });
+
+      const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
+      expect(pkgJson.npmdata.additionalPackages).toContain('@my-org/shared-data@^2.0.0');
+      expect(pkgJson.dependencies['@my-org/shared-data']).toBe('^2.0.0');
+    });
+
+    it('should return empty additionalPackages when none specified', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+      const result = await initPublisher(['docs'], { workingDir: tmpDir });
+
+      expect(result.success).toBe(true);
+      expect(result.additionalPackages).toBeUndefined();
+
+      const pkgJson = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json')).toString());
+      expect(pkgJson.npmdata).toBeUndefined();
     });
   });
 });
