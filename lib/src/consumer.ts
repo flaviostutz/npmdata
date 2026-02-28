@@ -203,7 +203,15 @@ async function ensurePackageInstalled(
 ): Promise<string> {
   const existingVersion = getInstalledPackageVersion(packageName, cwd);
 
-  if (!existingVersion || upgrade) {
+  if (!existingVersion) {
+    const spec = version ? `${packageName}@${version}` : packageName;
+    // eslint-disable-next-line no-console
+    console.log(`Installing missing package ${spec}...`);
+    await installPackage(packageName, version, packageManager, cwd);
+  } else if (upgrade) {
+    const spec = version ? `${packageName}@${version}` : packageName;
+    // eslint-disable-next-line no-console
+    console.log(`Bumping existing package ${spec}...`);
     await installPackage(packageName, version, packageManager, cwd);
   }
 
