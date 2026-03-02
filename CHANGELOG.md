@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 (2026-03-02)
+
+### Features
+
+* no-gitignore option, unmanaged option, init runner with tags option [[2d0f2a0](https://github.com/flaviostutz/npmdata/commit/2d0f2a066ca8b4a2b8258a68b87f35143cef9c5d)]
+* purge feature [[4a203dc](https://github.com/flaviostutz/npmdata/commit/4a203dc330044af2295c824e8371242e75af8e3b)]
+
+### Maintenance
+
+* release: 0.3.0 [[dafda2f](https://github.com/flaviostutz/npmdata/commit/dafda2f0e464099ef5875238edeb648b56b52ebc)]
+
+### Misc
+
+
+### Info
+
+* Authors: Flavio Stutz <flaviostutz@gmail.com>
+
+
 ## 0.3.0 (2026-02-28)
 
 ### Features
