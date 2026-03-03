@@ -20,13 +20,11 @@ test:
 	test -e output/docs/adrs/adr-001-sample1.md
 	test -e output/conf/globals.js
 
-	pnpm exec example-files-package extract --tags "basic"
+	pnpm exec example-files-package extract --tags "basic" --output output
 # 	fail if basic-tagged files are not present, and extra-tagged files are purged
 	test -e output/docs/adrs/adr-001-sample1.md
 	test ! -e output/conf/globals.js
 
 clean:
 	@rm -rf node_modules
-	@rm -rf data
-	@rm -rf docs
-	@rm -rf conf
+	@rm -rf output
