@@ -847,6 +847,66 @@ describe('runner', () => {
       const cmd = buildCheckCommand(CLI_PATH, entry);
       expect(cmd).toContain(`--output "${path.resolve(process.cwd(), 'out')}"`);
     });
+
+    it('includes --files flag when files are specified', () => {
+      const entry: NpmdataExtractEntry = {
+        package: 'my-pkg',
+        outputDir: '.',
+        files: ['*.md', 'docs/**'],
+      };
+      const cmd = buildCheckCommand(CLI_PATH, entry, CHECK_CWD);
+      expect(cmd).toContain('--files "*.md,docs/**"');
+    });
+
+    it('omits --files flag when files is not set', () => {
+      const entry: NpmdataExtractEntry = { package: 'my-pkg', outputDir: '.' };
+      const cmd = buildCheckCommand(CLI_PATH, entry, CHECK_CWD);
+      expect(cmd).not.toContain('--files');
+    });
+
+    it('omits --files flag when files is an empty array', () => {
+      const entry: NpmdataExtractEntry = { package: 'my-pkg', outputDir: '.', files: [] };
+      const cmd = buildCheckCommand(CLI_PATH, entry, CHECK_CWD);
+      expect(cmd).not.toContain('--files');
+    });
+
+    it('includes --content-regex flag when contentRegexes are specified', () => {
+      const entry: NpmdataExtractEntry = {
+        package: 'my-pkg',
+        outputDir: '.',
+        contentRegexes: ['foo.*bar', '^version:'],
+      };
+      const cmd = buildCheckCommand(CLI_PATH, entry, CHECK_CWD);
+      expect(cmd).toContain('--content-regex "foo.*bar,^version:"');
+    });
+
+    it('omits --content-regex flag when contentRegexes is not set', () => {
+      const entry: NpmdataExtractEntry = { package: 'my-pkg', outputDir: '.' };
+      const cmd = buildCheckCommand(CLI_PATH, entry, CHECK_CWD);
+      expect(cmd).not.toContain('--content-regex');
+    });
+
+    it('omits --content-regex flag when contentRegexes is an empty array', () => {
+      const entry: NpmdataExtractEntry = {
+        package: 'my-pkg',
+        outputDir: '.',
+        contentRegexes: [],
+      };
+      const cmd = buildCheckCommand(CLI_PATH, entry, CHECK_CWD);
+      expect(cmd).not.toContain('--content-regex');
+    });
+
+    it('includes both --files and --content-regex when both are set', () => {
+      const entry: NpmdataExtractEntry = {
+        package: 'my-pkg',
+        outputDir: './out',
+        files: ['data/**'],
+        contentRegexes: ['pattern'],
+      };
+      const cmd = buildCheckCommand(CLI_PATH, entry, CHECK_CWD);
+      expect(cmd).toContain('--files "data/**"');
+      expect(cmd).toContain('--content-regex "pattern"');
+    });
   });
 
   describe('buildListCommand', () => {
@@ -949,6 +1009,48 @@ describe('runner', () => {
 
       expect(mockExecSync).toHaveBeenCalledTimes(1);
       expect(capturedCommand()).toContain('--packages "my-pkg"');
+    });
+
+    it('passes --files from entry to check command', () => {
+      setupPackageJson({
+        name: 'my-pkg',
+        npmdata: [{ package: 'pkg-a', outputDir: './data', files: ['*.md', 'docs/**'] }],
+      });
+
+      run(BIN_DIR, ['node', 'script.js', 'check']);
+
+      expect(capturedCommand()).toContain('--files "*.md,docs/**"');
+    });
+
+    it('passes --content-regex from entry to check command', () => {
+      setupPackageJson({
+        name: 'my-pkg',
+        npmdata: [{ package: 'pkg-a', outputDir: './data', contentRegexes: ['foo.*bar'] }],
+      });
+
+      run(BIN_DIR, ['node', 'script.js', 'check']);
+
+      expect(capturedCommand()).toContain('--content-regex "foo.*bar"');
+    });
+
+    it('passes both --files and --content-regex from entry to check command', () => {
+      setupPackageJson({
+        name: 'my-pkg',
+        npmdata: [
+          {
+            package: 'pkg-a',
+            outputDir: './data',
+            files: ['data/**'],
+            contentRegexes: ['pattern'],
+          },
+        ],
+      });
+
+      run(BIN_DIR, ['node', 'script.js', 'check']);
+
+      const cmd = capturedCommand();
+      expect(cmd).toContain('--files "data/**"');
+      expect(cmd).toContain('--content-regex "pattern"');
     });
   });
 

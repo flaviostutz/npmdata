@@ -26,8 +26,10 @@ test:
 	test -e output/docs/adrs/adr-001-sample1.md
 	test ! -e output/conf/globals.js
 
-	pnpm exec example-files-package extract --tags "basic" --output output
+	pnpm exec example-files-package --tags "basic" --output output
 	test -e output/.configs/app.config.json
+
+	pnpm exec example-files-package check --tags basic --output output
 
 clean:
 	@rm -rf node_modules

@@ -53,7 +53,13 @@ export function buildCheckCommand(
   cwd: string = process.cwd(),
 ): string {
   const outputFlag = ` --output "${path.resolve(cwd, entry.outputDir)}"`;
-  return `node "${cliPath}" check --packages "${entry.package}"${outputFlag}`;
+  const filesFlag =
+    entry.files && entry.files.length > 0 ? ` --files "${entry.files.join(',')}"` : '';
+  const contentRegexFlag =
+    entry.contentRegexes && entry.contentRegexes.length > 0
+      ? ` --content-regex "${entry.contentRegexes.join(',')}"`
+      : '';
+  return `node "${cliPath}" check --packages "${entry.package}"${outputFlag}${filesFlag}${contentRegexFlag}`;
 }
 
 /**
