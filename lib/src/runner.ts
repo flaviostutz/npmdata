@@ -486,11 +486,12 @@ function runExtract(
 
   // When a tag filter is active, purge managed files from excluded entries so that
   // the output directory contains only files from the currently active tag group.
+  // Suppress the "Purging managed files..." banner for these implicit purges.
   for (const entry of excludedEntries) {
     const effectiveEntry: NpmdataExtractEntry = {
       ...entry,
       dryRun: entry.dryRun || dryRunFromArgv,
-      silent: entry.silent || silentFromArgv,
+      silent: true,
     };
     const command = buildPurgeCommand(cliPath, effectiveEntry, runCwd);
     execSync(command, { stdio: 'inherit', cwd: runCwd });
