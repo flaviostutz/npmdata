@@ -4,10 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { minimatch } from 'minimatch';
-import ignore from 'ignore';
 
 import { NpmdataExtractEntry } from './types';
-import { parsePackageSpec } from './utils';
+import { parsePackageSpec, readCsvMarker } from './utils';
 
 type PackageJson = {
   name: string;
@@ -228,88 +227,40 @@ export function filterEntriesByTags(
   return entries.filter((entry) => entry.tags && entry.tags.some((t) => requestedTags.includes(t)));
 }
 
-// ─── Glob helpers ─────────────────────────────────────────────────────────────
+// ─── Managed path helpers ──────────────────────────────────────────────────────
 
 /**
- * Read a .gitignore file at the given directory and return an Ignore instance.
- * Returns an empty Ignore instance when no .gitignore exists or it cannot be read.
+ * From the flat list of managed file paths (relative to outputDir) recorded in
+ * the .npmdata marker, derive every unique path that can be symlinked: each
+ * file itself plus every intermediate ancestor directory.
+ *
+ * Example: 'skills/skill-a/README.md' yields
+ *   'skills', 'skills/skill-a', 'skills/skill-a/README.md'
  */
-function readGitignore(dir: string): ReturnType<typeof ignore> {
-  const ig = ignore();
-  const gitignorePath = path.join(dir, '.gitignore');
-  if (!fs.existsSync(gitignorePath)) return ig;
-  // eslint-disable-next-line functional/no-try-statements
-  try {
-    ig.add(fs.readFileSync(gitignorePath, 'utf8'));
-  } catch {
-    // ignore unreadable .gitignore
+function managedPathsWithAncestors(managedFiles: ReturnType<typeof readCsvMarker>): string[] {
+  const paths = new Set<string>();
+  for (const mf of managedFiles) {
+    // eslint-disable-next-line functional/immutable-data
+    paths.add(mf.path);
+    const parts = mf.path.split('/');
+    // Add each ancestor directory by accumulating path segments.
+    parts.slice(0, -1).reduce((prefix, seg) => {
+      const ancestor = prefix ? `${prefix}/${seg}` : seg;
+      // eslint-disable-next-line functional/immutable-data
+      paths.add(ancestor);
+      return ancestor;
+    }, '');
   }
-  return ig;
+  return Array.from(paths);
 }
 
 /**
- * Walk a directory tree and return the absolute paths of every node (file or
- * directory) whose path relative to `rootDir` matches `pattern`.
- * Symlinked directories and directories matched by the root-level .gitignore
- * are skipped to avoid slow traversals on large projects.
+ * Read the .npmdata marker from outputDir and return managed file metadata.
+ * Returns an empty array when the marker does not exist.
  */
-function globMatchInDir(rootDir: string, pattern: string): string[] {
-  const results: string[] = [];
-  const gitignore = readGitignore(rootDir);
-
-  const walk = (dir: string, rel: string): void => {
-    if (!fs.existsSync(dir)) return;
-    for (const name of fs.readdirSync(dir)) {
-      const fullPath = path.join(dir, name);
-      const relPath = rel ? `${rel}/${name}` : name;
-      if (minimatch(relPath, pattern, { dot: true })) {
-        // eslint-disable-next-line functional/immutable-data
-        results.push(fullPath);
-      }
-      // Always descend into directories so patterns like **/skills/** can match
-      // entries deep in the tree even when the directory itself didn't match.
-      // Use lstatSync to avoid following symlinks into external directories.
-      // Skip gitignored directories that cannot contain managed files.
-      const lstat = fs.lstatSync(fullPath);
-      if (!lstat.isSymbolicLink() && lstat.isDirectory() && !gitignore.ignores(name)) {
-        walk(fullPath, relPath);
-      }
-    }
-  };
-
-  walk(rootDir, '');
-  return results;
-}
-
-/**
- * Walk a directory tree and return the absolute paths of files (not directories)
- * whose path relative to `rootDir` matches `pattern`.
- * Symlinked directories and directories matched by the root-level .gitignore
- * are skipped to avoid slow traversals on large projects.
- */
-function globMatchFiles(rootDir: string, pattern: string): string[] {
-  const results: string[] = [];
-  const gitignore = readGitignore(rootDir);
-
-  const walk = (dir: string, rel: string): void => {
-    if (!fs.existsSync(dir)) return;
-    for (const name of fs.readdirSync(dir)) {
-      const fullPath = path.join(dir, name);
-      const relPath = rel ? `${rel}/${name}` : name;
-      // Use lstatSync to avoid following symlinks into external directories.
-      // Skip gitignored directories.
-      const lstat = fs.lstatSync(fullPath);
-      if (!lstat.isSymbolicLink() && lstat.isDirectory() && !gitignore.ignores(name)) {
-        walk(fullPath, relPath);
-      } else if (!lstat.isSymbolicLink() && minimatch(relPath, pattern, { dot: true })) {
-        // eslint-disable-next-line functional/immutable-data
-        results.push(fullPath);
-      }
-    }
-  };
-
-  walk(rootDir, '');
-  return results;
+function readManagedFiles(outputDir: string): ReturnType<typeof readCsvMarker> {
+  const markerPath = path.join(outputDir, '.npmdata');
+  return fs.existsSync(markerPath) ? readCsvMarker(markerPath) : [];
 }
 
 /**
@@ -412,15 +363,19 @@ export function applySymlinks(entry: NpmdataExtractEntry, cwd: string = process.
   if (!entry.symlinks || entry.symlinks.length === 0) return;
 
   const outputDir = path.resolve(cwd, entry.outputDir);
+  const allManagedPaths = managedPathsWithAncestors(readManagedFiles(outputDir));
 
   for (const cfg of entry.symlinks) {
     const targetDir = path.resolve(cwd, cfg.target);
     fs.mkdirSync(targetDir, { recursive: true });
 
-    // Build desired symlink map: basename (in target) → absolute source path.
+    // Build desired symlink map from managed paths (files + ancestor dirs) matching the source pattern.
     const desired = new Map<string, string>();
-    for (const absMatch of globMatchInDir(outputDir, cfg.source)) {
-      desired.set(path.basename(absMatch), absMatch);
+    for (const relPath of allManagedPaths) {
+      if (minimatch(relPath, cfg.source, { dot: true })) {
+        const absMatch = path.join(outputDir, relPath);
+        desired.set(path.basename(absMatch), absMatch);
+      }
     }
 
     // Remove stale managed symlinks that are no longer in the desired set.
@@ -475,13 +430,21 @@ export function applyContentReplacements(
 ): void {
   if (!entry.contentReplacements || entry.contentReplacements.length === 0) return;
 
+  const outputDir = path.resolve(cwd, entry.outputDir);
+  const managedFiles = readManagedFiles(outputDir);
+
   for (const cfg of entry.contentReplacements) {
     const regex = new RegExp(cfg.match, 'gm');
-    for (const filePath of globMatchFiles(cwd, cfg.files)) {
-      const original = fs.readFileSync(filePath, 'utf8');
-      const updated = original.replace(regex, cfg.replace);
-      if (updated !== original) {
-        fs.writeFileSync(filePath, updated, 'utf8');
+    for (const mf of managedFiles) {
+      if (minimatch(mf.path, cfg.files, { dot: true })) {
+        const filePath = path.join(outputDir, mf.path);
+        if (fs.existsSync(filePath)) {
+          const original = fs.readFileSync(filePath, 'utf8');
+          const updated = original.replace(regex, cfg.replace);
+          if (updated !== original) {
+            fs.writeFileSync(filePath, updated, 'utf8');
+          }
+        }
       }
     }
   }
@@ -501,17 +464,24 @@ export function checkContentReplacements(
 ): string[] {
   if (!entry.contentReplacements || entry.contentReplacements.length === 0) return [];
 
+  const outputDir = path.resolve(cwd, entry.outputDir);
+  const managedFiles = readManagedFiles(outputDir);
   const outOfSync: string[] = [];
 
   for (const cfg of entry.contentReplacements) {
     const regex = new RegExp(cfg.match, 'gm');
-    for (const filePath of globMatchFiles(cwd, cfg.files)) {
-      const content = fs.readFileSync(filePath, 'utf8');
-      // A file is out of sync when applying the replacement would change it.
-      const expected = content.replace(regex, cfg.replace);
-      if (expected !== content) {
-        // eslint-disable-next-line functional/immutable-data
-        outOfSync.push(filePath);
+    for (const mf of managedFiles) {
+      if (minimatch(mf.path, cfg.files, { dot: true })) {
+        const filePath = path.join(outputDir, mf.path);
+        if (fs.existsSync(filePath)) {
+          const content = fs.readFileSync(filePath, 'utf8');
+          // A file is out of sync when applying the replacement would change it.
+          const expected = content.replace(regex, cfg.replace);
+          if (expected !== content) {
+            // eslint-disable-next-line functional/immutable-data
+            outOfSync.push(filePath);
+          }
+        }
       }
     }
   }

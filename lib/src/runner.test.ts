@@ -1090,6 +1090,7 @@ describe('runner', () => {
       );
       mockReadFileSync.mockImplementation(jest.requireActual<typeof fs>('node:fs').readFileSync);
       fs.writeFileSync(path.join(tmpDir, 'doc.md'), '<!-- old -->');
+      fs.writeFileSync(path.join(tmpDir, '.npmdata'), 'doc.md|pkg-a|1.0.0|0\n');
 
       const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
       // eslint-disable-next-line functional/no-let
@@ -1129,6 +1130,7 @@ describe('runner', () => {
       mockReadFileSync.mockImplementation(jest.requireActual<typeof fs>('node:fs').readFileSync);
       // File already has replacement applied – no diff expected
       fs.writeFileSync(path.join(tmpDir, 'doc.md'), '<!-- new -->');
+      fs.writeFileSync(path.join(tmpDir, '.npmdata'), 'doc.md|pkg-a|1.0.0|0\n');
 
       expect(() => run(BIN_DIR, ['node', 'script.js', 'check', '--output', tmpDir])).not.toThrow();
     });
@@ -1781,6 +1783,11 @@ describe('runner', () => {
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-b'), { recursive: true });
       fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '# Skill A');
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-b', 'guide.md'), '# Skill B');
+      fs.writeFileSync(
+        path.join(outputDir, '.npmdata'),
+        'skills/skill-a/README.md|pkg|1.0.0|0\nskills/skill-b/guide.md|pkg|1.0.0|0\n',
+      );
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
@@ -1808,6 +1815,8 @@ describe('runner', () => {
       const outputDir = path.join(tmpDir, 'out');
       const targetDir = path.join(tmpDir, '.github', 'skills');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
       fs.mkdirSync(targetDir, { recursive: true });
 
       // Simulate a stale symlink created by a previous extraction run that pointed
@@ -1843,6 +1852,8 @@ describe('runner', () => {
       const targetDir = path.join(tmpDir, '.github', 'skills');
       const externalDir = path.join(tmpDir, 'external');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
       fs.mkdirSync(externalDir, { recursive: true });
       fs.mkdirSync(targetDir, { recursive: true });
 
@@ -1865,6 +1876,8 @@ describe('runner', () => {
       const outputDir = path.join(tmpDir, 'out');
       const targetDir = path.join(tmpDir, '.github', 'skills');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
       fs.mkdirSync(targetDir, { recursive: true });
 
       // A regular directory exists at the target name
@@ -1887,6 +1900,8 @@ describe('runner', () => {
     it('is idempotent: running twice produces the same result', () => {
       const outputDir = path.join(tmpDir, 'out');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
@@ -1904,6 +1919,8 @@ describe('runner', () => {
     it('logs A for created symlinks in git style', () => {
       const outputDir = path.join(tmpDir, 'out');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
 
       const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -1925,6 +1942,8 @@ describe('runner', () => {
       const outputDir = path.join(tmpDir, 'out');
       const targetDir = path.join(tmpDir, '.github', 'skills');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
 
       // Create the symlink pointing to a different path first so it will be "updated".
       const oldSource = path.join(outputDir, 'skills', 'old-target');
@@ -1952,6 +1971,7 @@ describe('runner', () => {
       const outputDir = path.join(tmpDir, 'out');
       const targetDir = path.join(tmpDir, '.github', 'skills');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), '');
       fs.mkdirSync(targetDir, { recursive: true });
 
       const staleTarget = path.join(outputDir, 'skills', 'skill-OLD');
@@ -1976,6 +1996,8 @@ describe('runner', () => {
     it('does not log anything when silent is true', () => {
       const outputDir = path.join(tmpDir, 'out');
       fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
 
       const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -2029,11 +2051,13 @@ describe('runner', () => {
     });
 
     it('replaces matching content in workspace files', () => {
-      fs.mkdirSync(path.join(tmpDir, 'docs'), { recursive: true });
+      const outputDir = path.join(tmpDir, 'out');
+      fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
       fs.writeFileSync(
-        path.join(tmpDir, 'docs', 'README.md'),
+        path.join(outputDir, 'docs', 'README.md'),
         '# Title\n<!-- version: 0.0.0 -->\nBody',
       );
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'docs/README.md|pkg|1.0.0|0\n');
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
@@ -2049,14 +2073,17 @@ describe('runner', () => {
 
       applyContentReplacements(entry, tmpDir);
 
-      const updated = fs.readFileSync(path.join(tmpDir, 'docs', 'README.md'), 'utf8');
+      const updated = fs.readFileSync(path.join(outputDir, 'docs', 'README.md'), 'utf8');
       expect(updated).toContain('<!-- version: 1.2.3 -->');
       expect(updated).not.toContain('<!-- version: 0.0.0 -->');
     });
 
     it('replaces all occurrences across multiple files', () => {
-      fs.writeFileSync(path.join(tmpDir, 'a.md'), 'TOKEN');
-      fs.writeFileSync(path.join(tmpDir, 'b.md'), 'TOKEN and TOKEN');
+      const outputDir = path.join(tmpDir, 'out');
+      fs.mkdirSync(outputDir, { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'a.md'), 'TOKEN');
+      fs.writeFileSync(path.join(outputDir, 'b.md'), 'TOKEN and TOKEN');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'a.md|pkg|1.0.0|0\nb.md|pkg|1.0.0|0\n');
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
@@ -2066,13 +2093,16 @@ describe('runner', () => {
 
       applyContentReplacements(entry, tmpDir);
 
-      expect(fs.readFileSync(path.join(tmpDir, 'a.md'), 'utf8')).toBe('REPLACED');
-      expect(fs.readFileSync(path.join(tmpDir, 'b.md'), 'utf8')).toBe('REPLACED and REPLACED');
+      expect(fs.readFileSync(path.join(outputDir, 'a.md'), 'utf8')).toBe('REPLACED');
+      expect(fs.readFileSync(path.join(outputDir, 'b.md'), 'utf8')).toBe('REPLACED and REPLACED');
     });
 
     it('does not write a file when content does not change', () => {
-      const filePath = path.join(tmpDir, 'no-match.md');
+      const outputDir = path.join(tmpDir, 'out');
+      fs.mkdirSync(outputDir, { recursive: true });
+      const filePath = path.join(outputDir, 'no-match.md');
       fs.writeFileSync(filePath, 'nothing to replace here');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'no-match.md|pkg|1.0.0|0\n');
       const before = fs.statSync(filePath).mtimeMs;
 
       const entry: NpmdataExtractEntry = {
@@ -2087,7 +2117,10 @@ describe('runner', () => {
     });
 
     it('supports regex back-references in the replacement string', () => {
-      fs.writeFileSync(path.join(tmpDir, 'ref.md'), 'hello world');
+      const outputDir = path.join(tmpDir, 'out');
+      fs.mkdirSync(outputDir, { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'ref.md'), 'hello world');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'ref.md|pkg|1.0.0|0\n');
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
@@ -2097,7 +2130,7 @@ describe('runner', () => {
 
       applyContentReplacements(entry, tmpDir);
 
-      expect(fs.readFileSync(path.join(tmpDir, 'ref.md'), 'utf8')).toBe('world hello');
+      expect(fs.readFileSync(path.join(outputDir, 'ref.md'), 'utf8')).toBe('world hello');
     });
   });
 
@@ -2127,7 +2160,10 @@ describe('runner', () => {
     });
 
     it('returns an empty array when all replacements are already applied', () => {
-      fs.writeFileSync(path.join(tmpDir, 'doc.md'), '<!-- version: 1.2.3 -->');
+      const outputDir = path.join(tmpDir, 'out');
+      fs.mkdirSync(outputDir, { recursive: true });
+      fs.writeFileSync(path.join(outputDir, 'doc.md'), '<!-- version: 1.2.3 -->');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'doc.md|pkg|1.0.0|0\n');
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
@@ -2144,8 +2180,11 @@ describe('runner', () => {
     });
 
     it('returns paths of files where the replacement would still change content', () => {
-      const filePath = path.join(tmpDir, 'doc.md');
+      const outputDir = path.join(tmpDir, 'out');
+      fs.mkdirSync(outputDir, { recursive: true });
+      const filePath = path.join(outputDir, 'doc.md');
       fs.writeFileSync(filePath, '<!-- version: 0.0.0 -->');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'doc.md|pkg|1.0.0|0\n');
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
@@ -2160,8 +2199,11 @@ describe('runner', () => {
     });
 
     it('does not return a path when the file content would not change', () => {
-      const filePath = path.join(tmpDir, 'up-to-date.md');
+      const outputDir = path.join(tmpDir, 'out');
+      fs.mkdirSync(outputDir, { recursive: true });
+      const filePath = path.join(outputDir, 'up-to-date.md');
       fs.writeFileSync(filePath, 'no marker here');
+      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'up-to-date.md|pkg|1.0.0|0\n');
 
       const entry: NpmdataExtractEntry = {
         package: 'pkg',
