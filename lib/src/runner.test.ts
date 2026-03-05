@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import {
   run,
+  runEntries,
   parseTagsFromArgv,
   parseOutputFromArgv,
   parseDryRunFromArgv,
@@ -2559,6 +2560,112 @@ describe('runner', () => {
       const allOutput = stdoutSpy.mock.calls.map((c) => c[0] as string).join('');
       expect(allOutput).not.toContain('Total checked:');
       stdoutSpy.mockRestore();
+    });
+  });
+
+  describe('runEntries', () => {
+    const CLI_PATH = '/fake/npmdata/dist/main.js';
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'pkg-a', outputDir: './a' },
+      { package: 'pkg-b', outputDir: './b' },
+    ];
+
+    it('invokes execSync once per entry for extract action', () => {
+      runEntries(entries, 'extract', ['node', 'script.js', 'extract'], CLI_PATH);
+
+      expect(mockExecSync).toHaveBeenCalledTimes(2);
+      expect(capturedCommands()[0]).toContain('--packages "pkg-a"');
+      expect(capturedCommands()[1]).toContain('--packages "pkg-b"');
+    });
+
+    it('invokes execSync for check action', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockExecSync.mockReturnValue(Buffer.from('All files are in sync\n') as any);
+
+      runEntries(
+        [{ package: 'pkg-a', outputDir: './a' }],
+        'check',
+        ['node', 'script.js', 'check'],
+        CLI_PATH,
+      );
+
+      expect(mockExecSync).toHaveBeenCalledTimes(1);
+      expect(capturedCommand()).toContain('check');
+      expect(capturedCommand()).toContain('--packages "pkg-a"');
+    });
+
+    it('invokes execSync for purge action', () => {
+      // Return a string (not Buffer) because runPurge calls .match() on the captured stdout.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockExecSync.mockReturnValue('Purge complete: 0 deleted\n' as any);
+
+      runEntries(
+        [{ package: 'pkg-a', outputDir: './a' }],
+        'purge',
+        ['node', 'script.js', 'purge'],
+        CLI_PATH,
+      );
+
+      expect(mockExecSync).toHaveBeenCalledTimes(1);
+      expect(capturedCommand()).toContain('purge');
+      expect(capturedCommand()).toContain('"pkg-a"');
+    });
+
+    it('uses the provided cliPath in the generated command', () => {
+      runEntries(
+        [{ package: 'pkg-a', outputDir: '.' }],
+        'extract',
+        ['node', 'script.js', 'extract'],
+        CLI_PATH,
+      );
+
+      expect(capturedCommand()).toContain(CLI_PATH);
+    });
+
+    it('filters entries by --tags when provided in argv', () => {
+      const taggedEntries: NpmdataExtractEntry[] = [
+        { package: 'pkg-a', outputDir: './a', tags: ['docs'] },
+        { package: 'pkg-b', outputDir: './b', tags: ['data'] },
+      ];
+
+      runEntries(
+        taggedEntries,
+        'extract',
+        ['node', 'script.js', 'extract', '--tags', 'docs'],
+        CLI_PATH,
+      );
+
+      // Only pkg-a should be extracted; pkg-b gets purged (tag-excluded)
+      const commands = capturedCommands();
+      expect(commands.some((c) => c.includes('--packages "pkg-a"') && c.includes('extract'))).toBe(
+        true,
+      );
+      expect(commands.some((c) => c.includes('--packages "pkg-b"') && c.includes('purge'))).toBe(
+        true,
+      );
+    });
+
+    it('calls process.exit when a sub-command fails', () => {
+      const exitError = Object.assign(new Error('failed'), { status: 3 });
+      mockExecSync.mockImplementation(() => {
+        throw exitError;
+      });
+
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit called');
+      });
+
+      expect(() =>
+        runEntries(
+          [{ package: 'pkg-a', outputDir: '.' }],
+          'extract',
+          ['node', 'script.js', 'extract'],
+          CLI_PATH,
+        ),
+      ).toThrow('process.exit called');
+
+      expect(mockExit).toHaveBeenCalledWith(3);
+      mockExit.mockRestore();
     });
   });
 });

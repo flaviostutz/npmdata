@@ -56,6 +56,59 @@ No knowledge of the upstream packages or transformation rules is required.
 
 **When to use:** When an intermediary team (a platform, infrastructure, or data team) wants to bundle, curate, and version a collection of data from multiple sources and hand it to consumers as a single, opinionated package. Consumers get a stable, self-describing interface; producers control all the complexity.
 
+### Pattern 3 — Config file mode
+
+Add an `npmdata` configuration directly to a project's own `package.json` (or a `.npmdatarc` file) and then run `npmdata extract` without `--packages`. The CLI automatically loads the configuration and runs every entry, reusing the same runner logic as data packages.
+
+**Consumer** — declare the config inline in `package.json`:
+
+```json
+{
+  "name": "my-project",
+  "npmdata": [
+    {
+      "package": "base-datasets@^3.0.0",
+      "outputDir": "./data",
+      "files": ["datasets/**"]
+    }
+  ]
+}
+```
+
+Or write a standalone `.npmdatarc` (JSON array at the top level):
+
+```json
+[
+  {
+    "package": "base-datasets@^3.0.0",
+    "outputDir": "./data",
+    "files": ["datasets/**"]
+  }
+]
+```
+
+Then run any command without `--packages`:
+
+```sh
+npx npmdata extract   # reads config, extracts all entries
+npx npmdata check     # checks all entries
+npx npmdata purge     # purges all entries
+```
+
+Config is resolved using [cosmiconfig](https://github.com/cosmiconfig/cosmiconfig). Sources searched in order from the current directory:
+
+| Source | Key / format |
+|---|---|
+| `package.json` | `"npmdata"` key |
+| `.npmdatarc` | JSON or YAML array |
+| `.npmdatarc.json` | JSON array |
+| `.npmdatarc.yaml` / `.npmdatarc.yml` | YAML array |
+| `npmdata.config.js` | CommonJS module exporting array |
+
+All runner flags (`--dry-run`, `--silent`, `--verbose`, `--no-gitignore`, `--unmanaged`, `--tags`, `--output`) work as usual.
+
+**When to use:** When a consuming project wants to pin and automate a set of data extractions locally without publishing a separate data package. This is the lightest-weight approach — no extra package, no `init` step, just a config block and a single CLI call.
+
 ---
 
 ## Quick start
@@ -335,7 +388,10 @@ Init options:
                            and without being made read-only. Existing files are skipped.
 
 Extract options:
-  --packages <specs>       Comma-separated package specs (required).
+  --packages <specs>       Comma-separated package specs.
+                           When omitted, npmdata searches for a configuration file
+                           (package.json "npmdata" key, .npmdatarc, etc.) and runs all
+                           entries defined there.
                            Each spec is "name" or "name@version", e.g.
                            "my-pkg@^1.0.0,other-pkg@2.x"
   --output, -o <dir>       Output directory (default: current directory)
@@ -350,11 +406,13 @@ Extract options:
   --upgrade                Reinstall the package even if already present
 
 Check options:
-  --packages <specs>       Same format as extract (required)
+  --packages <specs>       Same format as extract.
+                           When omitted, reads from a configuration file (see Pattern 3).
   --output, -o <dir>       Output directory to check (default: current directory)
 
 Purge options:
-  --packages <specs>       Comma-separated package names whose managed files should be removed
+  --packages <specs>       Comma-separated package names whose managed files should be removed.
+                           When omitted, reads from a configuration file (see Pattern 3).
   --output, -o <dir>       Output directory to purge from (default: current directory)
   --dry-run                Simulate purge without removing any files
   --silent                 Suppress per-file output

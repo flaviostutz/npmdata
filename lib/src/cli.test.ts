@@ -11,6 +11,8 @@ import { extract, check, list, purge } from './consumer';
 // eslint-disable-next-line import/order, import/first
 import { initPublisher } from './publisher';
 // eslint-disable-next-line import/order, import/first
+import { runEntries } from './runner';
+// eslint-disable-next-line import/order, import/first
 import type { CheckResult } from './types';
 // eslint-disable-next-line import/order, import/first
 import { getInstalledPackageVersion } from './utils';
@@ -26,9 +28,20 @@ jest.mock('./publisher', () => ({
   initPublisher: jest.fn(),
 }));
 
+jest.mock('./runner', () => ({
+  ...jest.requireActual('./runner'),
+  runEntries: jest.fn(),
+}));
+
 jest.mock('./utils', () => ({
   ...jest.requireActual('./utils'),
   getInstalledPackageVersion: jest.fn(),
+}));
+
+// Cosmiconfig mock – controlled per test via mockCosmicSearch
+const mockCosmicSearch = jest.fn();
+jest.mock('cosmiconfig', () => ({
+  cosmiconfig: jest.fn(() => ({ search: mockCosmicSearch })),
 }));
 
 type MockedExtract = jest.MockedFunction<typeof extract>;
@@ -37,6 +50,7 @@ type MockedList = jest.MockedFunction<typeof list>;
 type MockedPurge = jest.MockedFunction<typeof purge>;
 type MockedInitPublisher = jest.MockedFunction<typeof initPublisher>;
 type MockedGetInstalledPackageVersion = jest.MockedFunction<typeof getInstalledPackageVersion>;
+type MockedRunEntries = jest.MockedFunction<typeof runEntries>;
 
 const mockExtract = extract as MockedExtract;
 const mockCheck = check as MockedCheck;
@@ -45,6 +59,7 @@ const mockPurge = purge as MockedPurge;
 const mockInitPublisher = initPublisher as MockedInitPublisher;
 const mockGetInstalledPackageVersion =
   getInstalledPackageVersion as MockedGetInstalledPackageVersion;
+const mockRunEntries = runEntries as MockedRunEntries;
 
 const defaultExtractResult = {
   added: [],
@@ -96,6 +111,9 @@ describe('CLI', () => {
       skipped: [],
       sourcePackages: [],
     });
+    // default: no cosmiconfig result found
+    // eslint-disable-next-line no-undefined, unicorn/no-useless-undefined
+    mockCosmicSearch.mockResolvedValue(undefined);
     // delete ./output folder if it exists to ensure clean state for tests
     const outputPath = path.join(__dirname, 'output');
     if (fs.existsSync(outputPath)) {
@@ -1179,6 +1197,165 @@ describe('CLI', () => {
       expect(allLogs).toContain('[verbose] list: found 2 managed package entries');
       expect(allLogs).toContain('my-pkg@1.0.0 has 1 managed file');
       expect(allLogs).toContain('other-pkg@2.0.0 has 2 managed files');
+    });
+  });
+
+  describe('config-file mode (cosmiconfig)', () => {
+    const sampleEntries = [
+      { package: 'my-data-pkg', outputDir: 'data' },
+      { package: 'other-pkg', outputDir: 'docs' },
+    ];
+
+    it('extract without --packages uses cosmiconfig entries and returns 0', async () => {
+      mockCosmicSearch.mockResolvedValue({
+        config: sampleEntries,
+        filepath: '/project/package.json',
+        isEmpty: false,
+      });
+
+      const exitCode = await cli(['node', 'cli.js', 'extract'], '/fake/main.js');
+
+      expect(exitCode).toBe(0);
+      expect(mockRunEntries).toHaveBeenCalledWith(
+        sampleEntries,
+        'extract',
+        ['node', 'cli.js', 'extract'],
+        '/fake/main.js',
+      );
+      expect(mockExtract).not.toHaveBeenCalled();
+    });
+
+    it('check without --packages uses cosmiconfig entries and returns 0', async () => {
+      mockCosmicSearch.mockResolvedValue({
+        config: sampleEntries,
+        filepath: '/project/.npmdatarc',
+        isEmpty: false,
+      });
+
+      const exitCode = await cli(['node', 'cli.js', 'check'], '/fake/main.js');
+
+      expect(exitCode).toBe(0);
+      expect(mockRunEntries).toHaveBeenCalledWith(
+        sampleEntries,
+        'check',
+        ['node', 'cli.js', 'check'],
+        '/fake/main.js',
+      );
+      expect(mockCheck).not.toHaveBeenCalled();
+    });
+
+    it('purge without --packages uses cosmiconfig entries and returns 0', async () => {
+      mockCosmicSearch.mockResolvedValue({
+        config: sampleEntries,
+        filepath: '/project/package.json',
+        isEmpty: false,
+      });
+
+      const exitCode = await cli(['node', 'cli.js', 'purge'], '/fake/main.js');
+
+      expect(exitCode).toBe(0);
+      expect(mockRunEntries).toHaveBeenCalledWith(
+        sampleEntries,
+        'purge',
+        ['node', 'cli.js', 'purge'],
+        '/fake/main.js',
+      );
+      expect(mockPurge).not.toHaveBeenCalled();
+    });
+
+    it('extract without --packages falls back to error when no config found', async () => {
+      // eslint-disable-next-line unicorn/no-useless-undefined, no-undefined
+      mockCosmicSearch.mockResolvedValue(undefined);
+
+      const exitCode = await cli(['node', 'cli.js', 'extract']);
+
+      expect(exitCode).toBe(1);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('--packages option is required'),
+      );
+      expect(mockRunEntries).not.toHaveBeenCalled();
+    });
+
+    it('check without --packages falls back to error when no config found', async () => {
+      // eslint-disable-next-line unicorn/no-useless-undefined, no-undefined
+      mockCosmicSearch.mockResolvedValue(undefined);
+
+      const exitCode = await cli(['node', 'cli.js', 'check']);
+
+      expect(exitCode).toBe(1);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('--packages option is required'),
+      );
+    });
+
+    it('purge without --packages falls back to error when no config found', async () => {
+      // eslint-disable-next-line unicorn/no-useless-undefined, no-undefined
+      mockCosmicSearch.mockResolvedValue(undefined);
+
+      const exitCode = await cli(['node', 'cli.js', 'purge']);
+
+      expect(exitCode).toBe(1);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('--packages option is required'),
+      );
+    });
+
+    it('extract without --packages falls back to error when config is empty array', async () => {
+      mockCosmicSearch.mockResolvedValue({
+        config: [],
+        filepath: '/project/package.json',
+        isEmpty: false,
+      });
+
+      const exitCode = await cli(['node', 'cli.js', 'extract']);
+
+      expect(exitCode).toBe(1);
+      expect(mockRunEntries).not.toHaveBeenCalled();
+    });
+
+    it('extract without --packages falls back to error when config isEmpty flag is set', async () => {
+      mockCosmicSearch.mockResolvedValue({
+        config: sampleEntries,
+        filepath: '/project/package.json',
+        isEmpty: true,
+      });
+
+      const exitCode = await cli(['node', 'cli.js', 'extract']);
+
+      expect(exitCode).toBe(1);
+      expect(mockRunEntries).not.toHaveBeenCalled();
+    });
+
+    it('config-file mode uses processArgs[1] as cliPath when none supplied', async () => {
+      mockCosmicSearch.mockResolvedValue({
+        config: sampleEntries,
+        filepath: '/project/package.json',
+        isEmpty: false,
+      });
+
+      const exitCode = await cli(['node', '/path/to/main.js', 'extract']);
+
+      expect(exitCode).toBe(0);
+      expect(mockRunEntries).toHaveBeenCalledWith(
+        sampleEntries,
+        'extract',
+        expect.any(Array),
+        '/path/to/main.js',
+      );
+    });
+
+    it('config-file mode passes CLI flags (--dry-run, --output) through argv to runEntries', async () => {
+      mockCosmicSearch.mockResolvedValue({
+        config: sampleEntries,
+        filepath: '/project/package.json',
+        isEmpty: false,
+      });
+
+      const argv = ['node', '/path/to/main.js', 'extract', '--dry-run', '--output', './out'];
+      const exitCode = await cli(argv, '/fake/main.js');
+
+      expect(exitCode).toBe(0);
+      expect(mockRunEntries).toHaveBeenCalledWith(sampleEntries, 'extract', argv, '/fake/main.js');
     });
   });
 });

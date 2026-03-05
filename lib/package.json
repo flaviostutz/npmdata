@@ -39,6 +39,7 @@
     "typescript": "^5.5.4"
   },
   "dependencies": {
+    "cosmiconfig": "^9.0.1",
     "ignore": "^7.0.5",
     "minimatch": "^10.2.2",
     "semver": "^7.7.4"

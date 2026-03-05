@@ -7,15 +7,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { cosmiconfig } from 'cosmiconfig';
+
 import { extract, check, list, purge } from './consumer';
-import { ConsumerConfig, ProgressEvent } from './types';
 import { initPublisher } from './publisher';
+import { runEntries } from './runner';
+import { ConsumerConfig, NpmdataExtractEntry, ProgressEvent } from './types';
 
 /**
  * CLI for npmdata
  */
 // eslint-disable-next-line complexity
-export async function cli(processArgs: string[]): Promise<number> {
+export async function cli(processArgs: string[], cliPath?: string): Promise<number> {
   const args = processArgs.slice(2);
 
   if (args.length === 0) {
@@ -197,6 +200,13 @@ export async function cli(processArgs: string[]): Promise<number> {
     }
 
     if (!purgePackageSpecs) {
+      const configEntries = await loadNpmdataConfig();
+      // eslint-disable-next-line no-undefined
+      if (configEntries !== undefined) {
+        const effectiveCliPath = cliPath ?? processArgs[1];
+        runEntries(configEntries, 'purge', processArgs, effectiveCliPath);
+        return 0;
+      }
       console.error(`Error: --packages option is required for 'purge' command`);
       printUsage();
       return 1;
@@ -313,6 +323,13 @@ export async function cli(processArgs: string[]): Promise<number> {
   }
 
   if (!packageSpecs) {
+    const configEntries = await loadNpmdataConfig();
+    // eslint-disable-next-line no-undefined
+    if (configEntries !== undefined) {
+      const effectiveCliPath = cliPath ?? processArgs[1];
+      runEntries(configEntries, command, processArgs, effectiveCliPath);
+      return 0;
+    }
     console.error(`Error: --packages option is required for '${command}' command`);
     printUsage();
     return 1;
@@ -480,6 +497,32 @@ export async function cli(processArgs: string[]): Promise<number> {
   return 1;
 }
 
+/**
+ * Search for an npmdata configuration using cosmiconfig.
+ * Looks for:
+ *   - "npmdata" key in package.json
+ *   - .npmdatarc  (JSON or YAML)
+ *   - .npmdatarc.json / .npmdatarc.yaml / .npmdatarc.js
+ *   - npmdata.config.js
+ *
+ * The resolved value must be an array of NpmdataExtractEntry objects.
+ * Returns the entries array when found, or null when no configuration is present.
+ */
+async function loadNpmdataConfig(): Promise<NpmdataExtractEntry[] | undefined> {
+  const explorer = cosmiconfig('npmdata');
+  const result = await explorer.search();
+  if (!result || result.isEmpty) {
+    // eslint-disable-next-line no-undefined
+    return undefined;
+  }
+  const cfg = result.config;
+  if (!Array.isArray(cfg) || cfg.length === 0) {
+    // eslint-disable-next-line no-undefined
+    return undefined;
+  }
+  return cfg as NpmdataExtractEntry[];
+}
+
 function printUsage(): void {
   console.log(`
 npmdata
@@ -509,7 +552,10 @@ Init Options:
   --verbose, -v                Print detailed progress information for each step
 
 Extract / Check Options:
-  --packages <specs>           Comma-separated package specs to extract from (required).
+  --packages <specs>           Comma-separated package specs to extract from.
+                               When omitted, npmdata searches for a configuration file
+                               (package.json "npmdata" key, .npmdatarc, etc.) and runs
+                               all entries defined there.
                                Each spec is "name" or "name@version"
                                e.g. "my-pkg@^1.2.3,other-pkg@2.x"
   --output, -o <dir>           Output directory (default: current directory, with a warning)
@@ -528,7 +574,10 @@ Extract / Check Options:
   --content-regex <regex>      Regex pattern to match file contents
 
 Purge Options:
-  --packages <specs>           Comma-separated package names whose managed files should be removed
+  --packages <specs>           Comma-separated package names whose managed files should be removed.
+                               When omitted, npmdata searches for a configuration file
+                               (package.json "npmdata" key, .npmdatarc, etc.) and purges
+                               all entries defined there.
   --output, -o <dir>           Output directory to purge from (default: current directory)
   --dry-run                    Simulate purge without removing any files
   --silent                     Suppress per-file output
@@ -543,6 +592,9 @@ Examples:
   npx npmdata extract --packages mydataset --output ./data
   npx npmdata extract --packages mydataset@^2.0.0 --output ./data
   npx npmdata extract --packages "mydataset@^2.0.0,otherpkg@1.x" --output ./data
+  npx npmdata extract          # reads npmdata config from package.json or .npmdatarc
+  npx npmdata check            # reads npmdata config from package.json or .npmdatarc
+  npx npmdata purge            # reads npmdata config from package.json or .npmdatarc
   npx npmdata extract --packages mydataset --dry-run --output ./data
   npx npmdata extract --packages mydataset --silent --output ./data
   npx npmdata extract --packages mydataset --upgrade --output ./data

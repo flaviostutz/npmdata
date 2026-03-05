@@ -799,6 +799,75 @@ function runPurge(
 }
 
 /**
+ * Run a given action for a list of pre-loaded npmdata entries.
+ * Parses common flags (--tags, --output, --dry-run, --silent, --verbose, --no-gitignore,
+ * --unmanaged) from argv and delegates to the appropriate action handler.
+ *
+ * Called from the CLI when a cosmiconfig configuration file is found and --packages is not
+ * provided, so the same runner logic used by embedded data-package runners is reused.
+ *
+ * @param allEntries - Array of NpmdataExtractEntry loaded from the configuration.
+ * @param action     - One of 'extract', 'check', 'list', 'purge'.
+ * @param argv       - Full process.argv (or equivalent); [0] and [1] are the node binary and
+ *                     script path which are sliced off internally.
+ * @param cliPath    - Absolute path to the npmdata CLI main.js that sub-processes will invoke.
+ */
+export function runEntries(
+  allEntries: NpmdataExtractEntry[],
+  action: string,
+  argv: string[],
+  cliPath: string,
+): void {
+  const userArgs = argv.slice(2);
+  const requestedTags = parseTagsFromArgv(argv);
+  const entries = filterEntriesByTags(allEntries, requestedTags);
+  const excludedEntries =
+    requestedTags.length > 0 ? allEntries.filter((e) => !entries.includes(e)) : [];
+
+  const parsedOutput = parseOutputFromArgv(userArgs);
+  const runCwd = parsedOutput ? path.resolve(process.cwd(), parsedOutput) : process.cwd();
+  const dryRunFromArgv = parseDryRunFromArgv(userArgs);
+  const silentFromArgv = parseSilentFromArgv(userArgs);
+  const verboseFromArgv = parseVerboseFromArgv(userArgs);
+  const noGitignoreFromArgv = parseNoGitignoreFromArgv(userArgs);
+  const unmanagedFromArgv = parseUnmanagedFromArgv(userArgs);
+
+  if (verboseFromArgv) {
+    // eslint-disable-next-line no-console
+    console.log(`[verbose] runner: action=${action} entries=${entries.length} cwd=${runCwd}`);
+  }
+
+  // eslint-disable-next-line functional/no-try-statements
+  try {
+    if (action === 'extract') {
+      runExtract(
+        entries,
+        excludedEntries,
+        cliPath,
+        runCwd,
+        dryRunFromArgv,
+        silentFromArgv,
+        verboseFromArgv,
+        noGitignoreFromArgv,
+        unmanagedFromArgv,
+      );
+    } else if (action === 'check') {
+      runCheck(entries, cliPath, runCwd, verboseFromArgv, unmanagedFromArgv);
+    } else if (action === 'list') {
+      runList(allEntries, cliPath, runCwd, verboseFromArgv);
+    } else if (action === 'purge') {
+      runPurge(entries, cliPath, runCwd, dryRunFromArgv, silentFromArgv, verboseFromArgv);
+    }
+  } catch (error: unknown) {
+    // The child process already printed the error via stdio:inherit.
+    // Exit with the child's exit code to suppress the Node.js stack trace.
+    const status = (error as { status?: number })?.status;
+    // eslint-disable-next-line unicorn/no-process-exit
+    process.exit(status ?? 1);
+  }
+}
+
+/**
  * Runs extraction for each entry defined in the publishable package's package.json "npmdata" array.
  * Invokes the npmdata CLI once per entry so that all CLI output and error handling is preserved.
  * Called from the minimal generated bin script with its own __dirname as binDir.

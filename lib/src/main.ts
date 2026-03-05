@@ -13,6 +13,7 @@ void (async (): Promise<void> => {
     console.log(errs.slice(0, Math.max(0, i)));
     process.exit(3);
   });
-  const exitCode = await cli(process.argv);
+  // Pass __filename so that config-file mode sub-processes can re-invoke this same script.
+  const exitCode = await cli(process.argv, __filename);
   process.exit(exitCode);
 })();

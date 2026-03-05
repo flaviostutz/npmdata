@@ -35,6 +35,7 @@ test:
 	make build
 
 	cd project-using-example-package && make test
+	cd project-using-config-file && make test
 
 install:
 	# replace the dependency with the local package
