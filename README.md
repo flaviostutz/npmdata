@@ -212,10 +212,12 @@ To use tags, add a `tags` array to each `npmdata` entry in the data package's `p
 
 ```json
 {
-  "npmdata": [
-    { "package": "my-shared-assets", "outputDir": "./data", "tags": ["prod"] },
-    { "package": "my-dev-assets",    "outputDir": "./dev-data", "tags": ["dev", "staging"] }
-  ]
+  "npmdata": {
+    "sets": [
+      { "package": "my-shared-assets", "outputDir": "./data", "tags": ["prod"] },
+      { "package": "my-dev-assets",    "outputDir": "./dev-data", "tags": ["dev", "staging"] }
+    ]
+  }
 }
 ```
 
@@ -321,10 +323,10 @@ npx npmdata check --packages "my-shared-assets,another-pkg" --output ./data
 The check command reports differences per package:
 
 ```
-my-shared-assets@^2.0.0  FAIL
-  missing:   data/new-file.json
-  modified:  data/configs/app.config.json
-  extra:     data/old-file.json
+  my-shared-assets@2.1.0: out of sync
+    - missing:  data/new-file.json
+    ~ modified: data/configs/app.config.json
+    + extra:    data/old-file.json
 ```
 
 ### 4. List managed files
@@ -377,7 +379,7 @@ Commands:
 
 Global options:
   --help, -h       Show help
-  --version, -v    Show version
+  --version        Show version
 
 Init options:
   --files <patterns>       Comma-separated glob patterns of files to publish (required)
@@ -402,6 +404,8 @@ Extract options:
                            "my-pkg@^1.0.0,other-pkg@2.x"
   --output, -o <dir>       Output directory (default: current directory)
   --force                  Overwrite existing unmanaged files or files owned by a different package
+  --keep-existing          Skip files that already exist; create them when absent. Cannot be
+                           combined with --force
   --no-gitignore           Skip creating/updating .gitignore (gitignore is enabled by default)
   --unmanaged              Write files without a .npmdata marker, .gitignore update, or read-only
                            flag. Existing files are skipped. Files can be freely edited afterwards
@@ -410,6 +414,8 @@ Extract options:
   --content-regex <regex>  Regex to filter files by content
   --dry-run                Preview changes without writing any files
   --upgrade                Reinstall the package even if already present
+  --silent                 Print only the final result line, suppressing per-file output
+  --verbose, -v            Print detailed progress information for each step
 
 Check options:
   --packages <specs>       Same format as extract.
@@ -525,8 +531,8 @@ await purge({
 });
 
 // list all files managed by npmdata in an output directory
-const managed = await list('./data');
-// managed is Record<string, string[]> keyed by "package@version"
+const managed = list('./data');
+// managed is Array<{ packageName: string; packageVersion: string; files: string[] }>
 
 // initialize a publisher package
 await initPublisher(['docs', 'data'], { workingDir: './my-package' });
