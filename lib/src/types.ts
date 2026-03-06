@@ -329,11 +329,11 @@ export type NpmdataExtractEntry = {
   contentRegexes?: string[];
 
   /**
-   * Tags used to group and selectively run entries. When the data package is invoked with
-   * --tags, only entries whose tags list includes at least one of the requested tags are
-   * processed. Entries with no tags are always skipped when a tag filter is active.
+   * Presets used to group and selectively run entries. When the data package is invoked with
+   * --presets, only entries whose presets list includes at least one of the requested presets are
+   * processed. Entries with no presets are always skipped when a preset filter is active.
    */
-  tags?: string[];
+  presets?: string[];
 
   /**
    * Post-extract symlink operations. After extraction, for each config the runner

@@ -7,14 +7,14 @@ import path from 'node:path';
 import {
   run,
   runEntries,
-  parseTagsFromArgv,
+  parsePresetsFromArgv,
   parseOutputFromArgv,
   parseDryRunFromArgv,
   parseSilentFromArgv,
   parseNoGitignoreFromArgv,
   parseUnmanagedFromArgv,
-  filterEntriesByTags,
-  collectAllTags,
+  filterEntriesByPresets,
+  collectAllPresets,
   printHelp,
   buildCheckCommand,
   buildListCommand,
@@ -481,35 +481,35 @@ describe('runner', () => {
     });
   });
 
-  describe('parseTagsFromArgv', () => {
-    it('returns an empty array when --tags is not present', () => {
-      expect(parseTagsFromArgv(['node', 'script.js'])).toEqual([]);
+  describe('parsePresetsFromArgv', () => {
+    it('returns an empty array when --presets is not present', () => {
+      expect(parsePresetsFromArgv(['node', 'script.js'])).toEqual([]);
     });
 
-    it('returns a single tag when --tags has one value', () => {
-      expect(parseTagsFromArgv(['node', 'script.js', '--tags', 'prod'])).toEqual(['prod']);
+    it('returns a single preset when --presets has one value', () => {
+      expect(parsePresetsFromArgv(['node', 'script.js', '--presets', 'prod'])).toEqual(['prod']);
     });
 
-    it('splits comma-separated tags', () => {
-      expect(parseTagsFromArgv(['node', 'script.js', '--tags', 'prod,staging'])).toEqual([
+    it('splits comma-separated presets', () => {
+      expect(parsePresetsFromArgv(['node', 'script.js', '--presets', 'prod,staging'])).toEqual([
         'prod',
         'staging',
       ]);
     });
 
-    it('trims whitespace from tags', () => {
-      expect(parseTagsFromArgv(['node', 'script.js', '--tags', ' prod , staging '])).toEqual([
+    it('trims whitespace from presets', () => {
+      expect(parsePresetsFromArgv(['node', 'script.js', '--presets', ' prod , staging '])).toEqual([
         'prod',
         'staging',
       ]);
     });
 
-    it('ignores --tags when there is no following value', () => {
-      expect(parseTagsFromArgv(['node', 'script.js', '--tags'])).toEqual([]);
+    it('ignores --presets when there is no following value', () => {
+      expect(parsePresetsFromArgv(['node', 'script.js', '--presets'])).toEqual([]);
     });
 
     it('filters out empty strings produced by trailing commas', () => {
-      expect(parseTagsFromArgv(['node', 'script.js', '--tags', 'prod,'])).toEqual(['prod']);
+      expect(parsePresetsFromArgv(['node', 'script.js', '--presets', 'prod,'])).toEqual(['prod']);
     });
   });
 
@@ -536,7 +536,7 @@ describe('runner', () => {
           'node',
           'script.js',
           'extract',
-          '--tags',
+          '--presets',
           'prod',
           '--output',
           './out',
@@ -545,55 +545,55 @@ describe('runner', () => {
     });
   });
 
-  describe('filterEntriesByTags', () => {
-    const entryA: NpmdataExtractEntry = { package: 'pkg-a', outputDir: './a', tags: ['prod'] };
+  describe('filterEntriesByPresets', () => {
+    const entryA: NpmdataExtractEntry = { package: 'pkg-a', outputDir: './a', presets: ['prod'] };
     const entryB: NpmdataExtractEntry = {
       package: 'pkg-b',
       outputDir: './b',
-      tags: ['staging', 'prod'],
+      presets: ['staging', 'prod'],
     };
-    const entryC: NpmdataExtractEntry = { package: 'pkg-c', outputDir: './c', tags: ['dev'] };
-    const entryNoTags: NpmdataExtractEntry = { package: 'pkg-d', outputDir: './d' };
+    const entryC: NpmdataExtractEntry = { package: 'pkg-c', outputDir: './c', presets: ['dev'] };
+    const entryNoPresets: NpmdataExtractEntry = { package: 'pkg-d', outputDir: './d' };
 
-    it('returns all entries when requestedTags is empty', () => {
-      expect(filterEntriesByTags([entryA, entryB, entryC, entryNoTags], [])).toEqual([
+    it('returns all entries when requestedPresets is empty', () => {
+      expect(filterEntriesByPresets([entryA, entryB, entryC, entryNoPresets], [])).toEqual([
         entryA,
         entryB,
         entryC,
-        entryNoTags,
+        entryNoPresets,
       ]);
     });
 
-    it('returns only entries matching the requested tag', () => {
-      expect(filterEntriesByTags([entryA, entryB, entryC, entryNoTags], ['prod'])).toEqual([
+    it('returns only entries matching the requested preset', () => {
+      expect(filterEntriesByPresets([entryA, entryB, entryC, entryNoPresets], ['prod'])).toEqual([
         entryA,
         entryB,
       ]);
     });
 
-    it('returns entries matching any of the requested tags', () => {
+    it('returns entries matching any of the requested presets', () => {
       expect(
-        filterEntriesByTags([entryA, entryB, entryC, entryNoTags], ['dev', 'staging']),
+        filterEntriesByPresets([entryA, entryB, entryC, entryNoPresets], ['dev', 'staging']),
       ).toEqual([entryB, entryC]);
     });
 
-    it('excludes entries with no tags when a tag filter is active', () => {
-      expect(filterEntriesByTags([entryNoTags], ['prod'])).toEqual([]);
+    it('excludes entries with no presets when a preset filter is active', () => {
+      expect(filterEntriesByPresets([entryNoPresets], ['prod'])).toEqual([]);
     });
 
     it('returns an empty array when no entries match', () => {
-      expect(filterEntriesByTags([entryA, entryC], ['staging'])).toEqual([]);
+      expect(filterEntriesByPresets([entryA, entryC], ['staging'])).toEqual([]);
     });
   });
 
-  describe('run – tags filtering', () => {
-    it('runs all entries when --tags is not provided', () => {
+  describe('run – presets filtering', () => {
+    it('runs all entries when --presets is not provided', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
           ],
         },
       });
@@ -603,18 +603,18 @@ describe('runner', () => {
       expect(mockExecSync).toHaveBeenCalledTimes(2);
     });
 
-    it('runs only entries matching the requested tag', () => {
+    it('runs only entries matching the requested preset', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       // 1 extract for pkg-a, 1 purge for excluded pkg-b
       expect(mockExecSync).toHaveBeenCalledTimes(2);
@@ -623,19 +623,19 @@ describe('runner', () => {
       expect(cmds.some((c) => c.includes('purge') && c.includes('pkg-b'))).toBe(true);
     });
 
-    it('runs entries matching any of the requested tags', () => {
+    it('runs entries matching any of the requested presets', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
-            { package: 'pkg-c', outputDir: './c', tags: ['dev'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
+            { package: 'pkg-c', outputDir: './c', presets: ['dev'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod,staging']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod,staging']);
 
       // 2 extracts (pkg-a, pkg-b) + 1 purge (excluded pkg-c)
       expect(mockExecSync).toHaveBeenCalledTimes(3);
@@ -644,13 +644,13 @@ describe('runner', () => {
       expect(cmds.filter((c) => c.includes('purge')).length).toBe(1);
     });
 
-    it('runs no extract commands but purges all entries when no entry matches the requested tag', () => {
+    it('runs no extract commands but purges all entries when no entry matches the requested preset', () => {
       setupPackageJson({
         name: 'my-pkg',
-        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', tags: ['dev'] }] },
+        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', presets: ['dev'] }] },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       // No extract, but purge is called for the excluded entry
       expect(mockExecSync).toHaveBeenCalledTimes(1);
@@ -658,18 +658,18 @@ describe('runner', () => {
       expect(capturedCommand()).not.toContain('extract');
     });
 
-    it('skips entries without tags from extract but purges them when a tag filter is active', () => {
+    it('skips entries without presets from extract but purges them when a preset filter is active', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
             { package: 'pkg-a', outputDir: './a' },
-            { package: 'pkg-b', outputDir: './b', tags: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['prod'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       // 1 extract (pkg-b) + 1 purge (untagged pkg-a)
       expect(mockExecSync).toHaveBeenCalledTimes(2);
@@ -678,31 +678,31 @@ describe('runner', () => {
       expect(cmds.some((c) => c.includes('purge') && c.includes('pkg-a'))).toBe(true);
     });
 
-    it('does not pass --tags to the extract command', () => {
+    it('does not pass --presets to the extract command', () => {
       setupPackageJson({
         name: 'my-pkg',
-        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', tags: ['prod'] }] },
+        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', presets: ['prod'] }] },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
-      expect(capturedCommand()).not.toContain('--tags');
+      expect(capturedCommand()).not.toContain('--presets');
     });
   });
 
-  describe('run – purge excluded entries when tags filter is active', () => {
-    it('purges excluded entries when a tag filter is active', () => {
+  describe('run – purge excluded entries when presets filter is active', () => {
+    it('purges excluded entries when a preset filter is active', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       // One extract call for pkg-a, one purge call for pkg-b
       expect(mockExecSync).toHaveBeenCalledTimes(2);
@@ -711,13 +711,13 @@ describe('runner', () => {
       expect(cmds.some((c) => c.includes('purge') && c.includes('pkg-b'))).toBe(true);
     });
 
-    it('does not purge anything when no tag filter is active', () => {
+    it('does not purge anything when no preset filter is active', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
           ],
         },
       });
@@ -735,14 +735,14 @@ describe('runner', () => {
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
-            { package: 'pkg-c', outputDir: './c', tags: ['dev'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
+            { package: 'pkg-c', outputDir: './c', presets: ['dev'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       // 1 extract (pkg-a), 2 purges (pkg-b, pkg-c)
       expect(mockExecSync).toHaveBeenCalledTimes(3);
@@ -751,53 +751,53 @@ describe('runner', () => {
       expect(cmds.filter((c) => c.includes('purge')).length).toBe(2);
     });
 
-    it('purges entries without tags when a tag filter is active', () => {
+    it('purges entries without presets when a preset filter is active', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
             { package: 'pkg-untagged', outputDir: './u' },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       const cmds = capturedCommands();
       expect(cmds.some((c) => c.includes('purge') && c.includes('pkg-untagged'))).toBe(true);
     });
 
-    it('purges nothing (only extract) when all entries match the tag filter', () => {
+    it('purges nothing (only extract) when all entries match the preset filter', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['prod', 'staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['prod', 'staging'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       expect(mockExecSync).toHaveBeenCalledTimes(2);
       const cmds = capturedCommands();
       expect(cmds.every((c) => c.includes('extract'))).toBe(true);
     });
 
-    it('runs only purge commands when no entries match the tag filter', () => {
+    it('runs only purge commands when no entries match the preset filter', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['staging'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['dev'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['staging'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['dev'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'extract', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'extract', '--presets', 'prod']);
 
       const cmds = capturedCommands();
       expect(cmds.every((c) => c.includes('purge'))).toBe(true);
@@ -1154,18 +1154,18 @@ describe('runner', () => {
       expect(cmd).toContain(`--output "${path.resolve('./data')}"`);
     });
 
-    it('respects --tags when running check', () => {
+    it('respects --presets when running check', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'check', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'check', '--presets', 'prod']);
 
       expect(mockExecSync).toHaveBeenCalledTimes(1);
       expect(capturedCommand()).toContain('pkg-a');
@@ -1415,19 +1415,19 @@ describe('runner', () => {
       expect(capturedCommand()).toContain(`--output "${path.resolve('/custom/base', 'data')}"`);
     });
 
-    it('lists all entries regardless of tag filter', () => {
+    it('lists all entries regardless of preset filter', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
           ],
         },
       });
 
-      // Even with --tags, list should show all output dirs
-      run(BIN_DIR, ['node', 'script.js', 'list', '--tags', 'prod']);
+      // Even with --presets, list should show all output dirs
+      run(BIN_DIR, ['node', 'script.js', 'list', '--presets', 'prod']);
 
       expect(mockExecSync).toHaveBeenCalledTimes(2);
     });
@@ -1461,18 +1461,18 @@ describe('runner', () => {
       expect(cmds.every((c) => c.includes('purge'))).toBe(true);
     });
 
-    it('respects --tags when running purge', () => {
+    it('respects --presets when running purge', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging'] },
           ],
         },
       });
 
-      run(BIN_DIR, ['node', 'script.js', 'purge', '--tags', 'prod']);
+      run(BIN_DIR, ['node', 'script.js', 'purge', '--presets', 'prod']);
 
       expect(mockExecSync).toHaveBeenCalledTimes(1);
       expect(capturedCommand()).toContain('pkg-a');
@@ -1741,48 +1741,48 @@ describe('runner', () => {
     });
   });
 
-  describe('collectAllTags', () => {
-    it('returns an empty array when no entry has tags', () => {
+  describe('collectAllPresets', () => {
+    it('returns an empty array when no entry has presets', () => {
       const entries: NpmdataExtractEntry[] = [
         { package: 'pkg-a', outputDir: './a' },
         { package: 'pkg-b', outputDir: './b' },
       ];
-      expect(collectAllTags(entries)).toEqual([]);
+      expect(collectAllPresets(entries)).toEqual([]);
     });
 
-    it('collects tags from a single entry', () => {
+    it('collects presets from a single entry', () => {
       const entries: NpmdataExtractEntry[] = [
-        { package: 'pkg-a', outputDir: './a', tags: ['prod', 'staging'] },
+        { package: 'pkg-a', outputDir: './a', presets: ['prod', 'staging'] },
       ];
-      expect(collectAllTags(entries)).toEqual(['prod', 'staging']);
+      expect(collectAllPresets(entries)).toEqual(['prod', 'staging']);
     });
 
-    it('deduplicates tags across entries', () => {
+    it('deduplicates presets across entries', () => {
       const entries: NpmdataExtractEntry[] = [
-        { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-        { package: 'pkg-b', outputDir: './b', tags: ['prod', 'staging'] },
-        { package: 'pkg-c', outputDir: './c', tags: ['dev'] },
+        { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+        { package: 'pkg-b', outputDir: './b', presets: ['prod', 'staging'] },
+        { package: 'pkg-c', outputDir: './c', presets: ['dev'] },
       ];
-      expect(collectAllTags(entries)).toEqual(['dev', 'prod', 'staging']);
+      expect(collectAllPresets(entries)).toEqual(['dev', 'prod', 'staging']);
     });
 
-    it('returns tags sorted alphabetically', () => {
+    it('returns presets sorted alphabetically', () => {
       const entries: NpmdataExtractEntry[] = [
-        { package: 'pkg-a', outputDir: './a', tags: ['zzz', 'aaa', 'mmm'] },
+        { package: 'pkg-a', outputDir: './a', presets: ['zzz', 'aaa', 'mmm'] },
       ];
-      expect(collectAllTags(entries)).toEqual(['aaa', 'mmm', 'zzz']);
+      expect(collectAllPresets(entries)).toEqual(['aaa', 'mmm', 'zzz']);
     });
 
-    it('ignores entries with undefined tags', () => {
+    it('ignores entries with undefined presets', () => {
       const entries: NpmdataExtractEntry[] = [
-        { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
+        { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
         { package: 'pkg-b', outputDir: './b' },
       ];
-      expect(collectAllTags(entries)).toEqual(['prod']);
+      expect(collectAllPresets(entries)).toEqual(['prod']);
     });
 
     it('returns an empty array for an empty entries list', () => {
-      expect(collectAllTags([])).toEqual([]);
+      expect(collectAllPresets([])).toEqual([]);
     });
   });
 
@@ -1795,7 +1795,7 @@ describe('runner', () => {
       writeSpy.mockRestore();
     });
 
-    it('lists available tags in the output', () => {
+    it('lists available presets in the output', () => {
       const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
       printHelp('my-data-pkg', ['dev', 'prod', 'staging']);
       const output = writeSpy.mock.calls[0][0] as string;
@@ -1803,7 +1803,7 @@ describe('runner', () => {
       writeSpy.mockRestore();
     });
 
-    it('shows a placeholder when no tags are available', () => {
+    it('shows a placeholder when no presets are available', () => {
       const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
       printHelp('my-data-pkg', []);
       const output = writeSpy.mock.calls[0][0] as string;
@@ -1811,11 +1811,11 @@ describe('runner', () => {
       writeSpy.mockRestore();
     });
 
-    it('mentions --tags option', () => {
+    it('mentions --presets option', () => {
       const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
       printHelp('my-data-pkg', []);
       const output = writeSpy.mock.calls[0][0] as string;
-      expect(output).toContain('--tags');
+      expect(output).toContain('--presets');
       writeSpy.mockRestore();
     });
 
@@ -1827,7 +1827,7 @@ describe('runner', () => {
       writeSpy.mockRestore();
     });
 
-    it('shows an extract-without-tags example using the package name', () => {
+    it('shows an extract-without-presets example using the package name', () => {
       const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
       printHelp('my-data-pkg', ['prod']);
       const output = writeSpy.mock.calls[0][0] as string;
@@ -1836,20 +1836,20 @@ describe('runner', () => {
       writeSpy.mockRestore();
     });
 
-    it('shows an extract-with-tags example using the first available tag', () => {
+    it('shows an extract-with-presets example using the first available preset', () => {
       const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
       printHelp('my-data-pkg', ['prod', 'staging']);
       const output = writeSpy.mock.calls[0][0] as string;
-      expect(output).toContain('my-data-pkg extract --tags prod');
+      expect(output).toContain('my-data-pkg extract --presets prod');
       expect(output).toContain('"prod"');
       writeSpy.mockRestore();
     });
 
-    it('uses "my-tag" as placeholder tag in example when no tags are defined', () => {
+    it('uses "my-preset" as placeholder preset in example when no presets are defined', () => {
       const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
       printHelp('my-data-pkg', []);
       const output = writeSpy.mock.calls[0][0] as string;
-      expect(output).toContain('my-data-pkg extract --tags my-tag');
+      expect(output).toContain('my-data-pkg extract --presets my-preset');
       writeSpy.mockRestore();
     });
   });
@@ -1858,7 +1858,7 @@ describe('runner', () => {
     it('prints help and does not run any extractions when --help is present', () => {
       setupPackageJson({
         name: 'my-pkg',
-        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', tags: ['prod'] }] },
+        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', presets: ['prod'] }] },
       });
       const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
@@ -1880,13 +1880,13 @@ describe('runner', () => {
       writeSpy.mockRestore();
     });
 
-    it('lists tags from npmdata entries in help output', () => {
+    it('lists presets from npmdata entries in help output', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: {
           sets: [
-            { package: 'pkg-a', outputDir: './a', tags: ['prod'] },
-            { package: 'pkg-b', outputDir: './b', tags: ['staging', 'prod'] },
+            { package: 'pkg-a', outputDir: './a', presets: ['prod'] },
+            { package: 'pkg-b', outputDir: './b', presets: ['staging', 'prod'] },
           ],
         },
       });
@@ -1900,7 +1900,7 @@ describe('runner', () => {
       writeSpy.mockRestore();
     });
 
-    it('shows placeholder when no tags are defined', () => {
+    it('shows placeholder when no presets are defined', () => {
       setupPackageJson({
         name: 'my-pkg',
         npmdata: { sets: [{ package: 'pkg-a', outputDir: './a' }] },
@@ -1931,10 +1931,10 @@ describe('runner', () => {
     it('runs extract when only flags are provided (no explicit action)', () => {
       setupPackageJson({
         name: 'my-pkg',
-        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', tags: ['t1'] }] },
+        npmdata: { sets: [{ package: 'pkg-a', outputDir: './a', presets: ['t1'] }] },
       });
 
-      run(BIN_DIR, ['node', 'script.js', '--tags', 't1']);
+      run(BIN_DIR, ['node', 'script.js', '--presets', 't1']);
 
       expect(mockExecSync).toHaveBeenCalled();
       expect(capturedCommand()).toContain('extract');
@@ -2701,16 +2701,16 @@ describe('runner', () => {
       expect(capturedCommand()).toContain(CLI_PATH);
     });
 
-    it('filters entries by --tags when provided in argv', () => {
+    it('filters entries by --presets when provided in argv', () => {
       const taggedEntries: NpmdataExtractEntry[] = [
-        { package: 'pkg-a', outputDir: './a', tags: ['docs'] },
-        { package: 'pkg-b', outputDir: './b', tags: ['data'] },
+        { package: 'pkg-a', outputDir: './a', presets: ['docs'] },
+        { package: 'pkg-b', outputDir: './b', presets: ['data'] },
       ];
 
       runEntries(
         taggedEntries,
         'extract',
-        ['node', 'script.js', 'extract', '--tags', 'docs'],
+        ['node', 'script.js', 'extract', '--presets', 'docs'],
         CLI_PATH,
       );
 

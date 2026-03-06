@@ -112,7 +112,7 @@ Config is resolved using [cosmiconfig](https://github.com/cosmiconfig/cosmiconfi
 | `.npmdatarc.yaml` / `.npmdatarc.yml` | YAML object with `"sets"` array |
 | `npmdata.config.js` | CommonJS module exporting object with `sets` array |
 
-All runner flags (`--dry-run`, `--silent`, `--verbose`, `--no-gitignore`, `--unmanaged`, `--tags`, `--output`) work as usual.
+All runner flags (`--dry-run`, `--silent`, `--verbose`, `--no-gitignore`, `--unmanaged`, `--presets`, `--output`) work as usual.
 
 **When to use:** When a consuming project wants to pin and automate a set of data extractions locally without publishing a separate data package. This is the lightest-weight approach — no extra package, no `init` step, just a config block and a single CLI call.
 
@@ -199,24 +199,24 @@ npx my-shared-assets extract --output ./data
 npx my-shared-assets check  --output ./data
 ```
 
-When the data package defines multiple `npmdata` entries in its `package.json`, you can limit which entries are processed using the `--tags` option. Only entries whose `tags` list includes at least one of the requested tags will be extracted; entries with no tags are skipped when a tag filter is active.
+When the data package defines multiple `npmdata` entries in its `package.json`, you can limit which entries are processed using the `--presets` option. Only entries whose `presets` list includes at least one of the requested presets will be extracted; entries with no presets are skipped when a preset filter is active.
 
 ```sh
 # run only entries tagged with "prod"
-npx my-shared-assets --tags prod
+npx my-shared-assets --presets prod
 
 # run entries tagged with either "prod" or "staging"
-npx my-shared-assets --tags prod,staging
+npx my-shared-assets --presets prod,staging
 ```
 
-To use tags, add a `tags` array to each `npmdata` entry in the data package's `package.json`:
+To use presets, add a `presets` array to each `npmdata` entry in the data package's `package.json`:
 
 ```json
 {
   "npmdata": {
     "sets": [
-      { "package": "my-shared-assets", "outputDir": "./data", "tags": ["prod"] },
-      { "package": "my-dev-assets",    "outputDir": "./dev-data", "tags": ["dev", "staging"] }
+      { "package": "my-shared-assets", "outputDir": "./data", "presets": ["prod"] },
+      { "package": "my-dev-assets",    "outputDir": "./dev-data", "presets": ["dev", "staging"] }
     ]
   }
 }
@@ -231,7 +231,7 @@ When calling the bin script bundled in a data package, the following options are
 | Option | Description |
 |---|---|
 | `--output, -o <dir>` | Base directory for resolving all `outputDir` paths (default: cwd). |
-| `--tags <tag1,tag2>` | Limit to entries whose `tags` overlap with the given list (comma-separated). |
+| `--presets <preset1,preset2>` | Limit to entries whose `presets` overlap with the given list (comma-separated). |
 | `--no-gitignore` | Disable `.gitignore` management for every entry, overriding each entry's `gitignore` field. |
 | `--unmanaged` | Run every entry in unmanaged mode, overriding each entry's `unmanaged` field. Files are written without a `.npmdata` marker, without `.gitignore` updates, and without being made read-only. |
 | `--dry-run` | Simulate changes without writing or deleting any files. |
@@ -265,7 +265,7 @@ Each entry in the `npmdata.sets` array in `package.json` supports the following 
 | `dryRun` | `boolean` | `false` | Simulate extraction without writing anything to disk. |
 | `upgrade` | `boolean` | `false` | Force a fresh install of the package even when a satisfying version is already installed. |
 | `silent` | `boolean` | `false` | Suppress per-file output, printing only the final result line. |
-| `tags` | `string[]` | none | Tags used to group and selectively run entries with `--tags`. |
+| `presets` | `string[]` | none | Presets used to group and selectively run entries with `--presets`. |
 | `symlinks` | `SymlinkConfig[]` | none | Post-extract symlink operations (see below). |
 | `contentReplacements` | `ContentReplacementConfig[]` | none | Post-extract content-replacement operations (see below). |
 
@@ -299,7 +299,7 @@ Example with multiple options:
       "files": ["docs/**", "configs/*.json"],
       "gitignore": true,
       "upgrade": true,
-      "tags": ["prod"],
+      "presets": ["prod"],
       "symlinks": [
         { "source": "**\/skills\/**", "target": ".github/skills" }
       ],

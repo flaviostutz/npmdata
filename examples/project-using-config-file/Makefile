@@ -53,18 +53,18 @@ test:
 	jq --slurpfile npmdata .npmdatarc '. + {npmdata: $$npmdata[0]}' package.json > package.json.tmp && mv package.json.tmp package.json
 	rm .npmdatarc
 
-	# --- Test 3: tags filtering via config ---
+	# --- Test 3: presets filtering via config ---
 	rm -rf output
-	pnpm exec npmdata extract --tags "basic"
+	pnpm exec npmdata extract --presets "basic"
 	# basic-tagged entry (example-files-package docs and data) should be extracted
 	test -e output/docs/adrs/adr-001-sample1.md
 	test -e output/data/users-dataset/user1.json
-	# postExtractScript should run even when --tags is used
+	# postExtractScript should run even when --presets is used
 	test -e output/lastUpdated
 	# extra-tagged entry (eslint) should not be extracted
 	test ! -e output/eslint/conf/globals.js
-	pnpm exec npmdata check --tags "basic"
-	pnpm exec npmdata purge --tags "basic"
+	pnpm exec npmdata check --presets "basic"
+	pnpm exec npmdata purge --presets "basic"
 	test ! -e output/docs/adrs/adr-001-sample1.md
 	test ! -e output/data/users-dataset/user1.json
 	test -e output/lastUpdated

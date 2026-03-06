@@ -17,7 +17,7 @@
           "docs/**",
           "data/**"
         ],
-        "tags": [
+        "presets": [
           "basic"
         ]
       },
@@ -28,7 +28,7 @@
           "conf/globals.js"
         ],
         "unmanaged": true,
-        "tags": [
+        "presets": [
           "extra"
         ]
       }

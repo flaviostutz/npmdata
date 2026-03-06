@@ -97,27 +97,27 @@ export function buildPurgeCommand(
 }
 
 /**
- * Collects all unique tags that appear across the given npmdata entries, sorted alphabetically.
+ * Collects all unique presets that appear across the given npmdata entries, sorted alphabetically.
  */
-export function collectAllTags(entries: NpmdataExtractEntry[]): string[] {
-  const tagSet = new Set<string>();
+export function collectAllPresets(entries: NpmdataExtractEntry[]): string[] {
+  const presetSet = new Set<string>();
   for (const entry of entries) {
-    if (entry.tags) {
-      for (const tag of entry.tags) {
-        tagSet.add(tag);
+    if (entry.presets) {
+      for (const preset of entry.presets) {
+        presetSet.add(preset);
       }
     }
   }
-  return Array.from(tagSet).sort();
+  return Array.from(presetSet).sort();
 }
 
 /**
- * Prints a help message to stdout, listing the extract action, all options, and available tags.
+ * Prints a help message to stdout, listing the extract action, all options, and available presets.
  */
-export function printHelp(packageName: string, availableTags: string[]): void {
-  const tagsLine =
-    availableTags.length > 0 ? availableTags.join(', ') : '(none defined in package.json)';
-  const exampleTag = availableTags.length > 0 ? availableTags[0] : 'my-tag';
+export function printHelp(packageName: string, availablePresets: string[]): void {
+  const presetsLine =
+    availablePresets.length > 0 ? availablePresets.join(', ') : '(none defined in package.json)';
+  const examplePreset = availablePresets.length > 0 ? availablePresets[0] : 'my-preset';
   process.stdout.write(
     [
       `Usage: ${packageName} <action> [options]`,
@@ -132,12 +132,12 @@ export function printHelp(packageName: string, availableTags: string[]): void {
       '  --help              Show this help message',
       '  --output, -o <dir>  Base directory for resolving all outputDir paths (default: cwd)',
       '  --dry-run           Simulate changes without writing or deleting any files',
-      '  --tags <tag1,tag2>  Limit to entries whose tags overlap (comma-separated)',
+      '  --presets <preset1,preset2>  Limit to entries whose presets overlap (comma-separated)',
       '  --no-gitignore      Disable .gitignore management for every entry (overrides per-entry setting)',
       '  --unmanaged         Run every entry in unmanaged mode (overrides per-entry setting)',
       '  --verbose, -v       Print detailed progress information for each step',
       '',
-      `Available tags: ${tagsLine}`,
+      `Available presets: ${presetsLine}`,
       '',
       'Examples:',
       `  ${packageName} extract`,
@@ -149,8 +149,8 @@ export function printHelp(packageName: string, availableTags: string[]): void {
       `  ${packageName} extract --dry-run`,
       '    Preview what would be extracted without writing any files',
       '',
-      `  ${packageName} extract --tags ${exampleTag}`,
-      `    Extract files only for entries tagged "${exampleTag}"`,
+      `  ${packageName} extract --presets ${examplePreset}`,
+      `    Extract files only for entries tagged "${examplePreset}"`,
       '',
       `  ${packageName} check`,
       '    Check if local files are in sync with the source packages',
@@ -216,11 +216,11 @@ export function parseUnmanagedFromArgv(argv: string[]): boolean {
 }
 
 /**
- * Parses --tags from an argv array and returns the list of requested tags (split by comma).
- * Returns an empty array when --tags is not present.
+ * Parses --presets from an argv array and returns the list of requested presets (split by comma).
+ * Returns an empty array when --presets is not present.
  */
-export function parseTagsFromArgv(argv: string[]): string[] {
-  const idx = argv.indexOf('--tags');
+export function parsePresetsFromArgv(argv: string[]): string[] {
+  const idx = argv.indexOf('--presets');
   if (idx === -1 || idx + 1 >= argv.length) {
     return [];
   }
@@ -231,18 +231,20 @@ export function parseTagsFromArgv(argv: string[]): string[] {
 }
 
 /**
- * Filter entries by requested tags. When no tags are requested all entries pass through.
- * When tags are requested only entries that share at least one tag with the requested list
+ * Filter entries by requested presets. When no presets are requested all entries pass through.
+ * When presets are requested only entries that share at least one preset with the requested list
  * are included.
  */
-export function filterEntriesByTags(
+export function filterEntriesByPresets(
   entries: NpmdataExtractEntry[],
-  requestedTags: string[],
+  requestedPresets: string[],
 ): NpmdataExtractEntry[] {
-  if (requestedTags.length === 0) {
+  if (requestedPresets.length === 0) {
     return entries;
   }
-  return entries.filter((entry) => entry.tags && entry.tags.some((t) => requestedTags.includes(t)));
+  return entries.filter(
+    (entry) => entry.presets && entry.presets.some((t) => requestedPresets.includes(t)),
+  );
 }
 
 // ─── Managed path helpers ──────────────────────────────────────────────────────
@@ -800,7 +802,7 @@ function runPurge(
 
 /**
  * Run a given action for a list of pre-loaded npmdata entries.
- * Parses common flags (--tags, --output, --dry-run, --silent, --verbose, --no-gitignore,
+ * Parses common flags (--presets, --output, --dry-run, --silent, --verbose, --no-gitignore,
  * --unmanaged) from argv and delegates to the appropriate action handler.
  *
  * Called from the CLI when a cosmiconfig configuration file is found and --packages is not
@@ -820,10 +822,10 @@ export function runEntries(
   postExtractScript?: string,
 ): void {
   const userArgs = argv.slice(2);
-  const requestedTags = parseTagsFromArgv(argv);
-  const entries = filterEntriesByTags(allEntries, requestedTags);
+  const requestedPresets = parsePresetsFromArgv(argv);
+  const entries = filterEntriesByPresets(allEntries, requestedPresets);
   const excludedEntries =
-    requestedTags.length > 0 ? allEntries.filter((e) => !entries.includes(e)) : [];
+    requestedPresets.length > 0 ? allEntries.filter((e) => !entries.includes(e)) : [];
 
   const parsedOutput = parseOutputFromArgv(userArgs);
   const runCwd = parsedOutput ? path.resolve(process.cwd(), parsedOutput) : process.cwd();
@@ -897,7 +899,7 @@ function runPostExtractScript(
  * Invokes the npmdata CLI once per entry so that all CLI output and error handling is preserved.
  * Called from the minimal generated bin script with its own __dirname as binDir.
  *
- * Pass --tags <tag1,tag2> to limit processing to entries whose tags overlap with the given list.
+ * Pass --presets <preset1,preset2> to limit processing to entries whose presets overlap with the given list.
  */
 export function run(binDir: string, argv: string[] = process.argv): void {
   const pkgJsonPath = path.join(binDir, '../package.json');
@@ -911,7 +913,7 @@ export function run(binDir: string, argv: string[] = process.argv): void {
   const userArgs = argv.slice(2);
 
   if (userArgs.includes('--help')) {
-    printHelp(pkg.name, collectAllTags(allEntries));
+    printHelp(pkg.name, collectAllPresets(allEntries));
     return;
   }
 
@@ -922,14 +924,14 @@ export function run(binDir: string, argv: string[] = process.argv): void {
     process.stderr.write(
       `Error: unknown action '${action}'. Use 'extract', 'check', 'list', or 'purge'.\n\n`,
     );
-    printHelp(pkg.name, collectAllTags(allEntries));
+    printHelp(pkg.name, collectAllPresets(allEntries));
     return;
   }
 
-  const requestedTags = parseTagsFromArgv(argv);
-  const entries = filterEntriesByTags(allEntries, requestedTags);
+  const requestedPresets = parsePresetsFromArgv(argv);
+  const entries = filterEntriesByPresets(allEntries, requestedPresets);
   const excludedEntries =
-    requestedTags.length > 0 ? allEntries.filter((e) => !entries.includes(e)) : [];
+    requestedPresets.length > 0 ? allEntries.filter((e) => !entries.includes(e)) : [];
 
   const cliPath = require.resolve('npmdata/dist/main.js', { paths: [binDir] });
   const parsedOutput = parseOutputFromArgv(userArgs);
