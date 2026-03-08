@@ -1,41 +1,6 @@
 SHELL := /bin/bash
 
+# Delegate all targets to the mypackage example, which orchestrates the full
+# publisher + consumer integration cycle.
 %:
-	@echo "Unknown target: $@. Ignoring"
-
-init-publisher: install
-	pnpm exec npmdata init --files "docs/**,data/**,conf/globals.js,.configs/**" --packages eslint@8
-
-build: install
-	rm -rf dist
-	pnpm pack --pack-destination dist
-
-build-dev:
-	cd ../lib; make build; cd ../examples; make init-publisher; make build; cd project-using-example-package; make test
-
-clean:
-	@rm -rf node_modules
-	@rm -rf dist
-	@rm -rf lib
-	@rm -rf bin
-	@rm package.json
-	@cp package.json.orig package.json
-
-test:
-	echo "Running integration tests..."
-	# use lib to init this project from scratch and prepare a deployable package with data
-	make clean
-	make init-publisher
-	make build
-
-	cd project-using-example-package && make test
-	cd project-using-config-file && make test
-
-install:
-	# replace the dependency with the local package
-	pnpm add npmdata@file:../lib/dist/npmdata-0.0.1.tgz
-	@# update local tar gz checksum
-	pnpm update cdk-practical-constructs
-	pnpm install
-
-all: build test
+	cd mypackage && make $@

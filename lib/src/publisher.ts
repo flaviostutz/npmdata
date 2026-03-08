@@ -1,5 +1,3 @@
-/* eslint-disable functional/immutable-data */
-/* eslint-disable no-restricted-syntax */
 import fs from 'node:fs';
 import path from 'node:path';
 

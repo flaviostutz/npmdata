@@ -1,0 +1,156 @@
+/* eslint-disable no-restricted-syntax */
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { execSync } from 'node:child_process';
+
+import archiver from 'archiver';
+
+const installMockPackage = async (
+  packageName: string,
+  files: Record<string, string>,
+  tmpDir: string,
+): Promise<string> => {
+  const packageDir = path.join(tmpDir, packageName);
+  // remove packageDir if it already exists from a previous test run to avoid conflicts
+  if (fs.existsSync(packageDir)) {
+    fs.rmSync(packageDir, { recursive: true });
+  }
+  fs.mkdirSync(packageDir, { recursive: true });
+
+  // Create package.json
+  const packageJson = {
+    name: packageName,
+    version: '1.0.0',
+  };
+  fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify(packageJson));
+
+  // Create other files
+  for (const [filePath, content] of Object.entries(files)) {
+    const fullPath = path.join(packageDir, filePath);
+    const dir = path.dirname(fullPath);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  }
+
+  // Create tar.gz file
+  const tarGzPath = path.join(tmpDir, `${packageName}.tar.gz`);
+  await new Promise<void>((resolve, reject) => {
+    const output = fs.createWriteStream(tarGzPath);
+    const archive = archiver('tar', { gzip: true });
+
+    output.on('close', () => resolve());
+    output.on('error', reject);
+    archive.on('error', reject);
+
+    archive.pipe(output);
+    archive.directory(packageDir, packageName);
+    archive.finalize().catch(reject);
+  });
+
+  // Create package.json in tmpDir if it doesn't exist so pnpm recognizes it as a project
+  const tmpDirPkgJson = path.join(tmpDir, 'package.json');
+  if (!fs.existsSync(tmpDirPkgJson)) {
+    fs.writeFileSync(tmpDirPkgJson, JSON.stringify({ name: 'tmp-test-project', version: '1.0.0' }));
+  }
+
+  // Install the tar.gz package into tmpDir/node_modules
+  execSync(`pnpm add ${tarGzPath}`, {
+    cwd: tmpDir,
+    stdio: 'pipe',
+  });
+
+  return packageDir;
+};
+
+describe('installMockPackage', () => {
+  // eslint-disable-next-line functional/no-let
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'install-mock-pkg-test-'));
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true });
+    }
+  });
+
+  it('should return the package source directory path', async () => {
+    const packageDir = await installMockPackage('mock-pkg-return', {}, tmpDir);
+    expect(packageDir).toBe(path.join(tmpDir, 'mock-pkg-return'));
+  });
+
+  it('should install the package into node_modules', async () => {
+    await installMockPackage('mock-pkg-install', { 'index.js': 'module.exports = {};' }, tmpDir);
+
+    const installedDir = path.join(tmpDir, 'node_modules', 'mock-pkg-install');
+    expect(fs.existsSync(installedDir)).toBe(true);
+  });
+
+  it('should have sane contents in node_modules installed package', async () => {
+    await installMockPackage(
+      'mock-pkg-contents',
+      {
+        'README.md': '# Mock Package',
+        'docs/guide.md': '# Guide',
+        'src/index.ts': 'export const value = 42;',
+      },
+      tmpDir,
+    );
+
+    const installedDir = path.join(tmpDir, 'node_modules', 'mock-pkg-contents');
+
+    // package.json should have correct name and version
+    const pkgJsonPath = path.join(installedDir, 'package.json');
+    expect(fs.existsSync(pkgJsonPath)).toBe(true);
+    const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath).toString());
+    expect(pkgJson.name).toBe('mock-pkg-contents');
+    expect(pkgJson.version).toBe('1.0.0');
+
+    // all specified files should exist with correct content
+    expect(fs.readFileSync(path.join(installedDir, 'README.md'), 'utf8')).toBe('# Mock Package');
+    expect(fs.readFileSync(path.join(installedDir, 'docs', 'guide.md'), 'utf8')).toBe('# Guide');
+    expect(fs.readFileSync(path.join(installedDir, 'src', 'index.ts'), 'utf8')).toBe(
+      'export const value = 42;',
+    );
+  });
+
+  it('should be discoverable via require.resolve from tmpDir', async () => {
+    await installMockPackage('mock-pkg-resolve', { 'index.js': 'module.exports = {};' }, tmpDir);
+
+    const resolvedPath = require.resolve('mock-pkg-resolve/package.json', { paths: [tmpDir] });
+
+    // resolved path must exist on disk
+    expect(fs.existsSync(resolvedPath)).toBe(true);
+
+    // package.json contents must be sane
+    const pkgJson = JSON.parse(fs.readFileSync(resolvedPath).toString());
+    expect(pkgJson.name).toBe('mock-pkg-resolve');
+    expect(pkgJson.version).toBe('1.0.0');
+
+    // package directory derived from resolved path must contain the installed files
+    const pkgDir = path.dirname(resolvedPath);
+    expect(fs.readFileSync(path.join(pkgDir, 'index.js')).toString()).toBe('module.exports = {};');
+  });
+
+  it('should produce a module that can be required and executed', async () => {
+    await installMockPackage(
+      'mock-pkg-usable',
+      {
+        'index.js':
+          'module.exports = { answer: 42, greet: function(name) { return "hello " + name; } };',
+      },
+      tmpDir,
+    );
+
+    const mod = require.resolve('mock-pkg-usable', { paths: [tmpDir] });
+    // check module contents
+    const pkgDir = path.dirname(mod);
+    // eslint-disable-next-line import/no-dynamic-require, global-require, @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const requiredModule = require(pkgDir);
+    expect(requiredModule.answer).toBe(42);
+    expect(requiredModule.greet('world')).toBe('hello world');
+  });
+});

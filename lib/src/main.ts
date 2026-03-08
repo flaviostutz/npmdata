@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cli } from './cli';
+import { cli } from './cli/cli';
 
 // eslint-disable-next-line no-void
 void (async (): Promise<void> => {

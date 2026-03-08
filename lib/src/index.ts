@@ -6,10 +6,10 @@ export {
   purge,
   findNearestMarkerPath,
   compressGitignoreEntries,
-} from './consumer';
-export type { PurgeConfig } from './consumer';
+} from './fileset/index';
+export type { PurgeConfig } from './fileset/purge';
 export { initPublisher } from './publisher';
-export { run, runEntries } from './runner';
+export { run, runEntries } from './package/runner';
 
 // Type exports
 export { DEFAULT_FILENAME_PATTERNS } from './types';
