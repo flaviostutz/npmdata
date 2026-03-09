@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.2 (2026-03-09)
+
+### Maintenance
+
+* release: 0.13.1 [[085b76c](https://github.com/flaviostutz/npmdata/commit/085b76c5599d7880e67612721978cdf562b46a63)]
+* be sure workspace is clean before publishing [[d7ad085](https://github.com/flaviostutz/npmdata/commit/d7ad08557391a69934dc441298bf2df9e0ac341e)]
+* upgrade eslint to 9 [[1e2ca05](https://github.com/flaviostutz/npmdata/commit/1e2ca052a5f737cf85f03dffc9e2798fd78a3e8b)]
+
+### Misc
+
+
+### Info
+
+* Authors: Flavio Stutz <flaviostutz@gmail.com>
+
+
 ## 0.13.1 (2026-03-09)
 
 ### Maintenance
