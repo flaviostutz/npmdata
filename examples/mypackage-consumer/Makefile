@@ -30,7 +30,8 @@ test:
 	test ! -e output/.configs/app.config.json
 	test ! -e output/docs/adrs/adr-001-sample1.md
 # 	this is unmanaged, so should still be present
-# 	test -e output/conf/config-schema.js
+	test -e output/conf/globals.js
+	rm -f output/conf/globals.js
 
 	pnpm exec example-files-package --output output
 

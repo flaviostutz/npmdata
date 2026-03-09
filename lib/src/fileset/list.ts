@@ -1,34 +1,10 @@
-import { loadAllManagedFiles } from './markers';
+import { ManagedFileMetadata } from '../types';
+
+import { readOutputDirMarker } from './markers';
 
 /**
- * List all managed files currently extracted in outputDir, grouped by package.
+ * Read all managed files from a single output directory's .npmdata marker.
  */
-export function list(outputDir: string): Array<{
-  packageName: string;
-  packageVersion: string;
-  files: string[];
-}> {
-  const allManaged = loadAllManagedFiles(outputDir);
-
-  const grouped = new Map<
-    string,
-    { packageName: string; packageVersion: string; files: string[] }
-  >();
-
-  for (const managed of allManaged) {
-    const key = `${managed.packageName}@${managed.packageVersion}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        packageName: managed.packageName,
-        packageVersion: managed.packageVersion,
-        files: [],
-      });
-    }
-    grouped.get(key)!.files.push(managed.path);
-  }
-
-  return [...grouped.values()].map((entry) => ({
-    ...entry,
-    files: entry.files.sort(),
-  }));
+export async function listManagedFiles(outputDir: string): Promise<ManagedFileMetadata[]> {
+  return readOutputDirMarker(outputDir);
 }

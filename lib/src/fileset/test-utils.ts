@@ -10,28 +10,26 @@ import archiver from 'archiver';
  * Creates a mock npm package with the given files, packages it as a tar.gz,
  * and installs it into tmpDir/node_modules using pnpm.
  *
- * @param packageName - Name of the package to create.
+ * @param name - Name of the package to create.
+ * @param version - Version of the package.
  * @param files - Map of relative file paths to file contents.
  * @param tmpDir - Temporary directory to use as the project root.
- * @returns The path to the created package directory.
+ * @returns The path to the installed package in node_modules.
  */
 export const installMockPackage = async (
-  packageName: string,
+  name: string,
+  version: string,
   files: Record<string, string>,
   tmpDir: string,
 ): Promise<string> => {
-  const packageDir = path.join(tmpDir, packageName);
-  // remove packageDir if it already exists from a previous test run to avoid conflicts
+  const packageDir = path.join(tmpDir, `${name}-source`);
   if (fs.existsSync(packageDir)) {
     fs.rmSync(packageDir, { recursive: true });
   }
   fs.mkdirSync(packageDir, { recursive: true });
 
   // Create package.json
-  const packageJson = {
-    name: packageName,
-    version: '1.0.0',
-  };
+  const packageJson = { name, version };
   fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify(packageJson));
 
   // Create other files
@@ -43,7 +41,7 @@ export const installMockPackage = async (
   }
 
   // Create tar.gz file
-  const tarGzPath = path.join(tmpDir, `${packageName}.tar.gz`);
+  const tarGzPath = path.join(tmpDir, `${name.replaceAll('/', '-')}-${version}.tar.gz`);
   await new Promise<void>((resolve, reject) => {
     const output = fs.createWriteStream(tarGzPath);
     const archive = archiver('tar', { gzip: true });
@@ -53,7 +51,7 @@ export const installMockPackage = async (
     archive.on('error', reject);
 
     archive.pipe(output);
-    archive.directory(packageDir, packageName);
+    archive.directory(packageDir, 'package');
     archive.finalize().catch(reject);
   });
 
@@ -69,5 +67,6 @@ export const installMockPackage = async (
     stdio: 'pipe',
   });
 
-  return packageDir;
+  // Return the installed package path in node_modules
+  return path.join(tmpDir, 'node_modules', name);
 };

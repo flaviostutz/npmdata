@@ -1,27 +1,31 @@
-// Main exports
-export {
-  extract,
-  check,
-  list,
-  purge,
-  findNearestMarkerPath,
-  compressGitignoreEntries,
-} from './fileset/index';
-export type { PurgeConfig } from './fileset/purge';
-export { initPublisher } from './publisher';
-export { run, runEntries } from './package/runner';
+// Public library exports for npmdata v2
 
-// Type exports
-export { DEFAULT_FILENAME_PATTERNS } from './types';
+export { actionExtract } from './package/action-extract';
+export type { ExtractOptions, ExtractResult } from './package/action-extract';
+
+export { actionCheck } from './package/action-check';
+export type { CheckOptions, CheckSummary } from './package/action-check';
+
+export { actionList } from './package/action-list';
+export type { ListOptions } from './package/action-list';
+
+export { actionPurge } from './package/action-purge';
+export type { PurgeOptions, PurgeSummary } from './package/action-purge';
+
+export { run } from './cli/runner';
+
 export type {
-  ConsumerConfig,
-  FileFilterConfig,
-  ManagedFileMetadata,
+  NpmdataConfig,
   NpmdataExtractEntry,
-  PublishablePackageJson,
-  ConsumerResult,
-  CheckResult,
+  PackageConfig,
+  SelectorConfig,
+  OutputConfig,
+  SymlinkConfig,
+  ContentReplacementConfig,
+  ManagedFileMetadata,
   ProgressEvent,
+  ExtractionMap,
+  CheckResult,
+  PurgeResult,
+  ExecuteResult,
 } from './types';
-export type { PublisherInitOptions, InitResult } from './publisher';
-export { parsePackageSpec, isBinaryFile } from './utils';

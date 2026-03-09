@@ -1,59 +1,73 @@
-#!/usr/bin/env node
 /* eslint-disable no-console */
-import fs from 'node:fs';
-import path from 'node:path';
+import { loadNpmdataConfig } from '../package/config';
 
-import { printUsage } from './usage';
-import { handleInit } from './commands/init';
-import { handleList } from './commands/list';
-import { handlePurge } from './commands/purge';
-import { handleExtract } from './commands/extract';
-import { handleCheck } from './commands/check';
+import { printUsage, printVersion } from './usage';
+import { runExtract } from './actions/extract';
+import { runCheck } from './actions/check';
+import { runList } from './actions/list';
+import { runPurge } from './actions/purge';
+import { runInit } from './actions/init';
+
+const KNOWN_COMMANDS = new Set(['extract', 'check', 'list', 'purge', 'init']);
 
 /**
- * CLI for npmdata
+ * Top-level CLI router.
+ * Detects command from argv, loads config, and dispatches to appropriate handler.
+ *
+ * @param argv - Process argument vector (argv[0] = node, argv[1] = script).
+ * @param cwd  - Working directory override (defaults to process.cwd()).
  */
-export async function cli(processArgs: string[], cliPath?: string): Promise<number> {
-  const args = processArgs.slice(2);
+export async function cli(argv: string[], cwd?: string): Promise<void> {
+  const args = argv.slice(2); // strip node + script
 
-  // Handle global help and version flags before defaulting to extract
-  if (args.length > 0 && (args[0] === '--help' || args[0] === '-h')) {
+  // Handle global --help with no command
+  if (args.includes('--help') && args.length === 1) {
     printUsage();
-    return 0;
+    return;
   }
 
-  if (args.length > 0 && args[0] === '--version') {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json')).toString());
-    console.log(pkg.version);
-    return 0;
+  // Handle global --version
+  if (args.includes('--version')) {
+    printVersion();
+    return;
   }
 
-  // Default to 'extract' when no args are given or when the first arg is a flag
-  const command = args.length === 0 || args[0].startsWith('-') ? 'extract' : args[0];
-  const argsOffset = args.length === 0 || args[0].startsWith('-') ? 0 : 1;
+  // Detect action
+  let action: string;
+  let cmdArgs: string[];
 
-  if (command === 'init') {
-    return handleInit(args, printUsage);
+  const firstArg = args[0];
+  if (firstArg && KNOWN_COMMANDS.has(firstArg)) {
+    action = firstArg;
+    cmdArgs = args.slice(1);
+  } else {
+    // Default to extract
+    action = 'extract';
+    cmdArgs = args;
   }
 
-  if (command === 'list') {
-    return handleList(args);
-  }
+  // Load config from cwd
+  const effectiveCwd = cwd ?? process.cwd();
+  const config = await loadNpmdataConfig(effectiveCwd);
 
-  if (command === 'purge') {
-    return handlePurge(args, processArgs, cliPath, printUsage);
+  switch (action) {
+    case 'extract':
+      await runExtract(config, cmdArgs, effectiveCwd);
+      break;
+    case 'check':
+      await runCheck(config, cmdArgs, effectiveCwd);
+      break;
+    case 'list':
+      await runList(config, cmdArgs, effectiveCwd);
+      break;
+    case 'purge':
+      await runPurge(config, cmdArgs, effectiveCwd);
+      break;
+    case 'init':
+      await runInit(config, cmdArgs, effectiveCwd);
+      break;
+    default:
+      console.error(`Unknown command: ${action}`);
+      process.exitCode = 1;
   }
-
-  if (['extract', 'check'].includes(command)) {
-    if (command === 'extract') {
-      return handleExtract(args, argsOffset, processArgs, cliPath, printUsage);
-    }
-    return handleCheck(args, argsOffset, processArgs, cliPath, printUsage);
-  }
-
-  console.error(
-    `Error: unknown command '${command}'. Use 'init', 'extract', 'check', 'purge', or 'list'`,
-  );
-  printUsage();
-  return 1;
 }

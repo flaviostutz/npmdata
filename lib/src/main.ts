@@ -1,19 +1,11 @@
 #!/usr/bin/env node
-
+/* eslint-disable unicorn/prefer-top-level-await */
 import { cli } from './cli/cli';
 
-// eslint-disable-next-line no-void
-void (async (): Promise<void> => {
-  process.on('uncaughtException', (err) => {
-    const errs = `${err}`;
-    // eslint-disable-next-line functional/no-let
-    let i = errs.indexOf('\n');
-    if (i === -1) i = errs.length;
+cli(process.argv)
+  // eslint-disable-next-line promise/prefer-await-to-callbacks
+  .catch((error: unknown) => {
     // eslint-disable-next-line no-console
-    console.log(errs.slice(0, Math.max(0, i)));
-    process.exit(3);
+    console.error((error as Error).message);
+    process.exitCode = 1;
   });
-  // Pass __filename so that config-file mode sub-processes can re-invoke this same script.
-  const exitCode = await cli(process.argv, __filename);
-  process.exit(exitCode);
-})();

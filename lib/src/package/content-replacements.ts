@@ -1,91 +1,100 @@
+/* eslint-disable no-restricted-syntax */
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { minimatch } from 'minimatch';
 
-import { NpmdataExtractEntry } from '../types';
-import { readCsvMarker } from '../utils';
+import { ContentReplacementConfig } from '../types';
+import { isBinaryFile } from '../utils';
 
-function readManagedFiles(outputDir: string): ReturnType<typeof readCsvMarker> {
-  const markerPath = path.join(outputDir, '.npmdata');
-  return fs.existsSync(markerPath) ? readCsvMarker(markerPath) : [];
+/**
+ * Apply content replacement rules to an in-memory string (pure function).
+ * Used during check comparison to apply the same transformations before hashing,
+ * so replaced files are not falsely reported as modified.
+ *
+ * @param content The file content as a string.
+ * @param replacements List of ContentReplacementConfig to apply.
+ * @returns Transformed content string.
+ */
+export function applyContentReplacementsToBuffer(
+  content: string,
+  replacements: ContentReplacementConfig[],
+): string {
+  let result = content;
+  for (const replacement of replacements) {
+    const regex = new RegExp(replacement.match, 'g');
+    result = result.replace(regex, replacement.replace);
+  }
+  return result;
 }
 
 /**
- * Apply the content-replacement configs from an extraction entry.
+ * Apply content replacement rules to files on disk matching the given glob patterns.
+ * Skips binary files.
  *
- * For each config:
- *  1. Expands the `files` glob inside `cwd`.
- *  2. Reads each matched file.
- *  3. Applies the regex replacement (global, multiline).
- *  4. Writes the file back only when the content changed.
+ * @param files   List of absolute file paths to apply replacements to.
+ *                Pre-resolved by the caller via glob matching.
+ * @param replacements List of ContentReplacementConfig to apply.
  */
-export function applyContentReplacements(
-  entry: NpmdataExtractEntry,
-  cwd: string = process.cwd(),
-): void {
-  if (!entry.output?.contentReplacements || entry.output.contentReplacements.length === 0) return;
+export async function applyContentReplacements(
+  cwd: string,
+  replacements: ContentReplacementConfig[],
+): Promise<void> {
+  if (replacements.length === 0) return;
 
-  const outputDir = path.resolve(cwd, entry.output.path);
-  const managedFiles = readManagedFiles(outputDir);
+  // Find all files matching any replacement's files glob under cwd
+  const allFiles = collectFilesForReplacements(cwd, replacements);
 
-  for (const cfg of entry.output.contentReplacements) {
-    const regex = new RegExp(cfg.match, 'gm');
-    for (const mf of managedFiles) {
-      if (minimatch(mf.path, cfg.files, { dot: true })) {
-        const filePath = path.join(outputDir, mf.path);
-        if (fs.existsSync(filePath)) {
-          const original = fs.readFileSync(filePath, 'utf8');
-          const updated = original.replace(regex, cfg.replace);
-          if (updated !== original) {
-            // Files extracted by npmdata are set to read-only (0o444).
-            // Temporarily make the file writable, apply the replacement, then restore read-only.
-            fs.chmodSync(filePath, 0o644);
-            fs.writeFileSync(filePath, updated, 'utf8');
-            fs.chmodSync(filePath, 0o444);
-          }
-        }
+  for (const filePath of allFiles) {
+    if (isBinaryFile(filePath)) continue;
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const transformed = applyContentReplacementsToBuffer(content, replacements);
+      if (transformed !== content) {
+        // Make writable, write, restore writability status
+        const stat = fs.statSync(filePath);
+        // eslint-disable-next-line no-bitwise
+        const wasReadOnly = (stat.mode & 0o200) === 0;
+        if (wasReadOnly) fs.chmodSync(filePath, 0o644);
+        fs.writeFileSync(filePath, transformed, 'utf8');
+        if (wasReadOnly) fs.chmodSync(filePath, 0o444);
       }
+    } catch {
+      // Skip unreadable files
     }
   }
 }
 
 /**
- * Check whether the content-replacement configs from an extraction entry are
- * currently in effect in the workspace.
- *
- * Returns a list of file paths where the replacement pattern still matches
- * (i.e. the replacement has not been applied or has drifted).  An empty list
- * means everything is in sync.
+ * Collect all files under cwd matching at least one replacement's files glob.
  */
-export function checkContentReplacements(
-  entry: NpmdataExtractEntry,
-  cwd: string = process.cwd(),
+function collectFilesForReplacements(
+  cwd: string,
+  replacements: ContentReplacementConfig[],
 ): string[] {
-  if (!entry.output?.contentReplacements || entry.output.contentReplacements.length === 0)
-    return [];
+  const globs = replacements.map((r) => r.files);
+  const results: string[] = [];
 
-  const outputDir = path.resolve(cwd, entry.output.path);
-  const managedFiles = readManagedFiles(outputDir);
-  const outOfSync: string[] = [];
-
-  for (const cfg of entry.output.contentReplacements) {
-    const regex = new RegExp(cfg.match, 'gm');
-    for (const mf of managedFiles) {
-      if (minimatch(mf.path, cfg.files, { dot: true })) {
-        const filePath = path.join(outputDir, mf.path);
-        if (fs.existsSync(filePath)) {
-          const content = fs.readFileSync(filePath, 'utf8');
-          // A file is out of sync when applying the replacement would change it.
-          const expected = content.replace(regex, cfg.replace);
-          if (expected !== content) {
-            // eslint-disable-next-line functional/immutable-data
-            outOfSync.push(filePath);
-          }
-        }
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir)) {
+      const fullPath = path.join(dir, entry);
+      const stat = fs.lstatSync(fullPath);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      const relPath = path.relative(cwd, fullPath);
+      if (globs.some((glob) => minimatch(relPath, glob, { dot: true }))) {
+        results.push(fullPath);
       }
     }
-  }
+  };
 
-  return outOfSync;
+  try {
+    walk(cwd);
+  } catch {
+    // ignore
+  }
+  return results;
 }

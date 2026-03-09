@@ -1,33 +1,55 @@
+/* eslint-disable no-restricted-syntax */
 /* eslint-disable no-console */
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 
-import { NpmdataExtractEntry } from '../types';
+import { NpmdataConfig, NpmdataExtractEntry, ManagedFileMetadata } from '../types';
+import { listManagedFiles } from '../fileset/list';
 
-import { buildListCommand } from './commands';
+export type ListOptions = {
+  entries: NpmdataExtractEntry[];
+  config: NpmdataConfig | null;
+  cwd: string;
+  output?: string;
+  verbose?: boolean;
+};
 
-export function runList(
-  allEntries: NpmdataExtractEntry[],
-  cliPath: string,
-  runCwd: string,
-  verboseFromArgv: boolean,
-): void {
-  // Collect unique resolved output dirs (tag filter not applied; list is informational).
-  const seenDirs = new Set<string>();
-  if (verboseFromArgv) {
+/**
+ * Aggregate all managed files across unique output directories.
+ * Note: list always ignores --presets; reports all managed files.
+ */
+export async function actionList(options: ListOptions): Promise<ManagedFileMetadata[]> {
+  const { entries, cwd, output, verbose = false } = options;
+  const seen = new Set<string>();
+  const results: ManagedFileMetadata[] = [];
+
+  if (verbose) {
     console.log(
-      `[verbose] list: listing managed files across ${allEntries.length} entr${allEntries.length === 1 ? 'y' : 'ies'} (cwd: ${runCwd})`,
+      `[verbose] list: listing managed files across ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (cwd: ${cwd})`,
     );
   }
-  for (const entry of allEntries) {
-    const resolvedDir = path.resolve(runCwd, entry.output.path);
-    if (!seenDirs.has(resolvedDir)) {
-      seenDirs.add(resolvedDir);
-      if (verboseFromArgv) {
-        console.log(`[verbose] list: scanning directory ${resolvedDir}`);
+
+  // Collect unique output dirs
+  const outputDirs: string[] = [];
+  if (output) {
+    outputDirs.push(path.resolve(cwd, output));
+  } else {
+    for (const entry of entries) {
+      const dir = path.resolve(cwd, entry.output.path);
+      if (!seen.has(dir)) {
+        seen.add(dir);
+        if (verbose) {
+          console.log(`[verbose] list: scanning directory ${dir}`);
+        }
+        outputDirs.push(dir);
       }
-      const command = buildListCommand(cliPath, entry.output.path, runCwd, verboseFromArgv);
-      execSync(command, { stdio: 'inherit', cwd: runCwd });
     }
   }
+
+  for (const dir of outputDirs) {
+    // eslint-disable-next-line no-await-in-loop
+    const files = await listManagedFiles(dir);
+    results.push(...files);
+  }
+
+  return results;
 }

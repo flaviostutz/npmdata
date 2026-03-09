@@ -1,306 +1,139 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import os from 'node:os';
 
-import { NpmdataExtractEntry } from '../types';
+import { createSymlinks, removeStaleSymlinks, removeAllSymlinks } from './symlinks';
 
-import { applySymlinks } from './index';
+let tmpDir: string;
 
-jest.mock('node:child_process', () => ({
-  execSync: jest.fn(),
-}));
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'npmdata-symlinks-'));
+});
 
-jest.mock('node:fs', () => ({
-  ...jest.requireActual('node:fs'),
-  readFileSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
+afterEach(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
-type MockedReadFileSync = jest.MockedFunction<typeof fs.readFileSync>;
+describe('createSymlinks', () => {
+  it('creates a symlink in the target directory for each matched source', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'docs', 'README.md'), '# hi');
 
-const mockReadFileSync = fs.readFileSync as MockedReadFileSync;
+    const targetDir = path.join(tmpDir, 'links');
+    await createSymlinks(outputDir, [{ source: 'docs/README.md', target: '../links' }]);
 
-describe('runner', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
+    const linkPath = path.join(targetDir, 'README.md');
+    expect(fs.existsSync(linkPath)).toBe(true);
+    const stat = fs.lstatSync(linkPath);
+    expect(stat.isSymbolicLink()).toBe(true);
   });
 
-  // ─── applySymlinks ──────────────────────────────────────────────────────────
-  describe('applySymlinks', () => {
-    // eslint-disable-next-line functional/no-let
-    let tmpDir: string;
+  it('overwrites an existing symlink', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'docs', 'file.md'), 'v1');
 
-    beforeEach(() => {
-      // These tests need real filesystem; restore readFileSync and mkdirSync to the actual implementation.
-      mockReadFileSync.mockImplementation(jest.requireActual<typeof fs>('node:fs').readFileSync);
-      (fs.mkdirSync as jest.Mock).mockImplementation(
-        jest.requireActual<typeof fs>('node:fs').mkdirSync,
-      );
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-symlinks-test-'));
-    });
+    const targetDir = path.join(tmpDir, 'links');
+    fs.mkdirSync(targetDir, { recursive: true });
+    const linkPath = path.join(targetDir, 'file.md');
+    fs.symlinkSync('/dev/null', linkPath);
 
-    afterEach(() => {
-      if (fs.existsSync(tmpDir)) {
-        fs.rmSync(tmpDir, { recursive: true });
-      }
-    });
+    await createSymlinks(outputDir, [{ source: 'docs/file.md', target: '../links' }]);
+    const target = fs.readlinkSync(linkPath);
+    expect(target).not.toBe('/dev/null');
+  });
 
-    it('does nothing when entry has no symlinks config', () => {
-      const entry: NpmdataExtractEntry = { package: 'pkg', output: { path: './out' } };
-      // Should not throw
-      expect(() => applySymlinks(entry, tmpDir)).not.toThrow();
-    });
+  it('no-ops on empty configs', async () => {
+    await expect(createSymlinks(tmpDir, [])).resolves.toBeUndefined();
+  });
+});
 
-    it('does nothing when symlinks array is empty', () => {
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: './out', symlinks: [] },
-      };
-      expect(() => applySymlinks(entry, tmpDir)).not.toThrow();
-    });
+describe('removeStaleSymlinks', () => {
+  it('removes symlinks that no longer match their source glob', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
 
-    it('creates target directory if it does not exist', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(outputDir, { recursive: true });
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
+    const targetDir = path.join(outputDir, 'links');
+    fs.mkdirSync(targetDir, { recursive: true });
 
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
+    // Create a stale symlink (source file no longer matches)
+    const staleLink = path.join(targetDir, 'old.md');
+    fs.symlinkSync('/dev/null', staleLink);
 
-      applySymlinks(entry, tmpDir);
+    // Source glob matches nothing in outputDir
+    await removeStaleSymlinks(outputDir, [{ source: 'does-not-match/**', target: 'links' }]);
 
-      expect(fs.existsSync(targetDir)).toBe(true);
-    });
+    // Stale symlink should be removed
+    expect(fs.existsSync(staleLink)).toBe(false);
+  });
 
-    it('creates a symlink for each matched file in the outputDir', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-b'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '# Skill A');
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-b', 'guide.md'), '# Skill B');
-      fs.writeFileSync(
-        path.join(outputDir, '.npmdata'),
-        'skills/skill-a/README.md|pkg|1.0.0|0\nskills/skill-b/guide.md|pkg|1.0.0|0\n',
-      );
+  it('keeps symlinks that still match their source', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'docs', 'keep.md'), '# keep');
 
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
+    const targetDir = path.join(outputDir, 'links');
+    fs.mkdirSync(targetDir, { recursive: true });
 
-      applySymlinks(entry, tmpDir);
+    const keepLink = path.join(targetDir, 'keep.md');
+    const relTarget = path.relative(targetDir, path.join(outputDir, 'docs', 'keep.md'));
+    fs.symlinkSync(relTarget, keepLink);
 
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      const symlinkA = path.join(targetDir, 'skill-a');
-      const symlinkB = path.join(targetDir, 'skill-b');
+    await removeStaleSymlinks(outputDir, [{ source: 'docs/*.md', target: 'links' }]);
 
-      expect(fs.lstatSync(symlinkA).isSymbolicLink()).toBe(true);
-      expect(fs.realpathSync(symlinkA)).toBe(
-        fs.realpathSync(path.join(outputDir, 'skills', 'skill-a')),
-      );
-      expect(fs.lstatSync(symlinkB).isSymbolicLink()).toBe(true);
-      expect(fs.realpathSync(symlinkB)).toBe(
-        fs.realpathSync(path.join(outputDir, 'skills', 'skill-b')),
-      );
-    });
+    expect(fs.existsSync(keepLink) || fs.lstatSync(keepLink).isSymbolicLink()).toBe(true);
+  });
+});
 
-    it('removes stale managed symlinks that no longer match the glob', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
-      fs.mkdirSync(targetDir, { recursive: true });
+describe('removeAllSymlinks', () => {
+  it('removes all symlinks pointing into the outputDir', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'target.md'), '# target');
 
-      // Simulate a stale symlink created by a previous extraction run that pointed
-      // into outputDir but whose source no longer exists there.  The symlink is dead.
-      const staleTarget = path.join(outputDir, 'skills', 'skill-OLD');
-      fs.symlinkSync(staleTarget, path.join(targetDir, 'skill-OLD'));
+    const linksDir = path.join(outputDir, 'links');
+    fs.mkdirSync(linksDir, { recursive: true });
 
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
+    const relTarget = path.relative(linksDir, path.join(outputDir, 'target.md'));
+    fs.symlinkSync(relTarget, path.join(linksDir, 'link.md'));
 
-      applySymlinks(entry, tmpDir);
+    const count = await removeAllSymlinks(outputDir);
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
 
-      // Stale symlink must be removed; new one must be created.
-      // Use lstatSync (does NOT follow links) so a dead symlink is also detected.
-      const oldLinkGone = ((): boolean => {
-        // eslint-disable-next-line functional/no-try-statements
-        try {
-          fs.lstatSync(path.join(targetDir, 'skill-OLD'));
-          return false;
-        } catch {
-          return true;
-        }
-      })();
-      expect(oldLinkGone).toBe(true);
-      expect(fs.lstatSync(path.join(targetDir, 'skill-a')).isSymbolicLink()).toBe(true);
-    });
+  it('returns 0 when directory does not exist', async () => {
+    const count = await removeAllSymlinks(path.join(tmpDir, 'nonexistent'));
+    expect(count).toBe(0);
+  });
 
-    it('does not touch symlinks that do not point into outputDir', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      const externalDir = path.join(tmpDir, 'external');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
-      fs.mkdirSync(externalDir, { recursive: true });
-      fs.mkdirSync(targetDir, { recursive: true });
+  it('skips symlinks NOT pointing into outputDir', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
 
-      // Non-managed symlink pointing outside outputDir
-      fs.symlinkSync(externalDir, path.join(targetDir, 'external-link'));
+    // Create a symlink that points outside outputDir
+    const externalTarget = path.join(tmpDir, 'external.md');
+    fs.writeFileSync(externalTarget, '# external');
+    fs.symlinkSync(externalTarget, path.join(outputDir, 'external-link.md'));
 
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
+    const count = await removeAllSymlinks(outputDir);
+    // The symlink to external target should not be removed
+    expect(count).toBe(0);
+    expect(fs.existsSync(path.join(outputDir, 'external-link.md'))).toBe(true);
+  });
 
-      applySymlinks(entry, tmpDir);
+  it('recurses into subdirectories to find and remove symlinks', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    const subDir = path.join(outputDir, 'sub');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'target.txt'), 'hello');
 
-      // External symlink must survive
-      expect(fs.lstatSync(path.join(targetDir, 'external-link')).isSymbolicLink()).toBe(true);
-    });
+    // Symlink inside subDir pointing to outputDir file
+    const relTarget = path.relative(subDir, path.join(outputDir, 'target.txt'));
+    fs.symlinkSync(relTarget, path.join(subDir, 'link.txt'));
 
-    it('does not clobber an existing non-symlink at the target basename', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
-      fs.mkdirSync(targetDir, { recursive: true });
-
-      // A regular directory exists at the target name
-      const existing = path.join(targetDir, 'skill-a');
-      fs.mkdirSync(existing, { recursive: true });
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
-
-      applySymlinks(entry, tmpDir);
-
-      // Must remain a regular directory, not a symlink
-      expect(fs.lstatSync(existing).isSymbolicLink()).toBe(false);
-      expect(fs.lstatSync(existing).isDirectory()).toBe(true);
-    });
-
-    it('is idempotent: running twice produces the same result', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
-
-      applySymlinks(entry, tmpDir);
-      applySymlinks(entry, tmpDir);
-
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      expect(fs.lstatSync(path.join(targetDir, 'skill-a')).isSymbolicLink()).toBe(true);
-    });
-
-    it('logs A for created symlinks in git style', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
-
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
-
-      applySymlinks(entry, tmpDir);
-
-      const expectedPath = path.join('out', '.github', 'skills', 'skill-a');
-      expect(logSpy).toHaveBeenCalledWith(`A\t${expectedPath}`);
-
-      logSpy.mockRestore();
-    });
-
-    it('logs M for updated symlinks in git style', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
-
-      // Create the symlink pointing to a different path first so it will be "updated".
-      const oldSource = path.join(outputDir, 'skills', 'old-target');
-      fs.mkdirSync(oldSource, { recursive: true });
-      fs.mkdirSync(targetDir, { recursive: true });
-      fs.symlinkSync(oldSource, path.join(targetDir, 'skill-a'));
-
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
-
-      applySymlinks(entry, tmpDir);
-
-      const expectedPath = path.join('out', '.github', 'skills', 'skill-a');
-      expect(logSpy).toHaveBeenCalledWith(`M\t${expectedPath}`);
-
-      logSpy.mockRestore();
-    });
-
-    it('logs D for removed stale symlinks in git style', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      const targetDir = path.join(outputDir, '.github', 'skills');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), '');
-      fs.mkdirSync(targetDir, { recursive: true });
-
-      const staleTarget = path.join(outputDir, 'skills', 'skill-OLD');
-      fs.symlinkSync(staleTarget, path.join(targetDir, 'skill-OLD'));
-
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-      };
-
-      applySymlinks(entry, tmpDir);
-
-      const expectedPath = path.join('out', '.github', 'skills', 'skill-OLD');
-      expect(logSpy).toHaveBeenCalledWith(`D\t${expectedPath}`);
-
-      logSpy.mockRestore();
-    });
-
-    it('does not log anything when silent is true', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(path.join(outputDir, 'skills', 'skill-a'), { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'skills', 'skill-a', 'README.md'), '');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'skills/skill-a/README.md|pkg|1.0.0|0\n');
-
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: 'out', symlinks: [{ source: 'skills/*', target: '.github/skills' }] },
-        silent: true,
-      };
-
-      applySymlinks(entry, tmpDir);
-
-      expect(logSpy).not.toHaveBeenCalled();
-
-      logSpy.mockRestore();
-    });
+    const count = await removeAllSymlinks(outputDir);
+    expect(count).toBeGreaterThanOrEqual(1);
+    expect(fs.existsSync(path.join(subDir, 'link.txt'))).toBe(false);
   });
 });

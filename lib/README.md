@@ -27,7 +27,7 @@ Create a dedicated npm package whose `package.json` declares an `npmdata` config
 
 ```json
 {
-  "name": "my-org-data",
+  "name": "my-org-configs",
   "version": "1.0.0",
   "npmdata": {
     "sets": [
@@ -51,7 +51,7 @@ Run `pnpm dlx npmdata init` in that package and then `npm publish` to release it
 **Consumer** — just install and run:
 
 ```sh
-npx my-org-data extract --output ./local-data
+npx my-org-configs extract --output ./local-data
 ```
 
 No knowledge of the upstream packages or transformation rules is required.

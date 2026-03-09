@@ -1,240 +1,133 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import os from 'node:os';
 
-import { NpmdataExtractEntry } from '../types';
+import { applyContentReplacementsToBuffer, applyContentReplacements } from './content-replacements';
 
-import { applyContentReplacements, checkContentReplacements } from './index';
+let tmpDir: string;
 
-jest.mock('node:child_process', () => ({
-  execSync: jest.fn(),
-}));
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'npmdata-cr-test-'));
+});
 
-jest.mock('node:fs', () => ({
-  ...jest.requireActual('node:fs'),
-  readFileSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
+afterEach(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
-type MockedReadFileSync = jest.MockedFunction<typeof fs.readFileSync>;
-
-const mockReadFileSync = fs.readFileSync as MockedReadFileSync;
-
-describe('runner', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
+describe('applyContentReplacementsToBuffer', () => {
+  it('replaces a simple string', () => {
+    const result = applyContentReplacementsToBuffer('Hello World', [
+      { files: '*.md', match: 'World', replace: 'npmdata' },
+    ]);
+    expect(result).toBe('Hello npmdata');
   });
 
-  // ─── applyContentReplacements ───────────────────────────────────────────────
-  describe('applyContentReplacements', () => {
-    // eslint-disable-next-line functional/no-let
-    let tmpDir: string;
-
-    beforeEach(() => {
-      // These tests need real filesystem; restore readFileSync and mkdirSync to the actual implementation.
-      mockReadFileSync.mockImplementation(jest.requireActual<typeof fs>('node:fs').readFileSync);
-      (fs.mkdirSync as jest.Mock).mockImplementation(
-        jest.requireActual<typeof fs>('node:fs').mkdirSync,
-      );
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-content-replace-test-'));
-    });
-
-    afterEach(() => {
-      if (fs.existsSync(tmpDir)) {
-        fs.rmSync(tmpDir, { recursive: true });
-      }
-    });
-
-    it('does nothing when entry has no contentReplacements config', () => {
-      const entry: NpmdataExtractEntry = { package: 'pkg', output: { path: './out' } };
-      expect(() => applyContentReplacements(entry, tmpDir)).not.toThrow();
-    });
-
-    it('does nothing when contentReplacements array is empty', () => {
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: { path: './out', contentReplacements: [] },
-      };
-      expect(() => applyContentReplacements(entry, tmpDir)).not.toThrow();
-    });
-
-    it('replaces matching content in workspace files', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
-      fs.writeFileSync(
-        path.join(outputDir, 'docs', 'README.md'),
-        '# Title\n<!-- version: 0.0.0 -->\nBody',
-      );
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'docs/README.md|pkg|1.0.0|0\n');
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: {
-          path: './out',
-          contentReplacements: [
-            {
-              files: 'docs/**/*.md',
-              match: '<!-- version: .* -->',
-              replace: '<!-- version: 1.2.3 -->',
-            },
-          ],
-        },
-      };
-
-      applyContentReplacements(entry, tmpDir);
-
-      const updated = fs.readFileSync(path.join(outputDir, 'docs', 'README.md'), 'utf8');
-      expect(updated).toContain('<!-- version: 1.2.3 -->');
-      expect(updated).not.toContain('<!-- version: 0.0.0 -->');
-    });
-
-    it('replaces all occurrences across multiple files', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(outputDir, { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'a.md'), 'TOKEN');
-      fs.writeFileSync(path.join(outputDir, 'b.md'), 'TOKEN and TOKEN');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'a.md|pkg|1.0.0|0\nb.md|pkg|1.0.0|0\n');
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: {
-          path: './out',
-          contentReplacements: [{ files: '*.md', match: 'TOKEN', replace: 'REPLACED' }],
-        },
-      };
-
-      applyContentReplacements(entry, tmpDir);
-
-      expect(fs.readFileSync(path.join(outputDir, 'a.md'), 'utf8')).toBe('REPLACED');
-      expect(fs.readFileSync(path.join(outputDir, 'b.md'), 'utf8')).toBe('REPLACED and REPLACED');
-    });
-
-    it('does not write a file when content does not change', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(outputDir, { recursive: true });
-      const filePath = path.join(outputDir, 'no-match.md');
-      fs.writeFileSync(filePath, 'nothing to replace here');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'no-match.md|pkg|1.0.0|0\n');
-      const before = fs.statSync(filePath).mtimeMs;
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: {
-          path: './out',
-          contentReplacements: [{ files: '*.md', match: 'TOKEN', replace: 'REPLACED' }],
-        },
-      };
-
-      applyContentReplacements(entry, tmpDir);
-
-      expect(fs.statSync(filePath).mtimeMs).toBe(before);
-    });
-
-    it('supports regex back-references in the replacement string', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(outputDir, { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'ref.md'), 'hello world');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'ref.md|pkg|1.0.0|0\n');
-
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: {
-          path: './out',
-          contentReplacements: [{ files: '*.md', match: '(hello) (world)', replace: '$2 $1' }],
-        },
-      };
-
-      applyContentReplacements(entry, tmpDir);
-
-      expect(fs.readFileSync(path.join(outputDir, 'ref.md'), 'utf8')).toBe('world hello');
-    });
+  it('applies multiple replacements in order', () => {
+    const result = applyContentReplacementsToBuffer('foo bar', [
+      { files: '*.md', match: 'foo', replace: 'baz' },
+      { files: '*.md', match: 'bar', replace: 'qux' },
+    ]);
+    expect(result).toBe('baz qux');
   });
 
-  // ─── checkContentReplacements ───────────────────────────────────────────────
-  describe('checkContentReplacements', () => {
-    // eslint-disable-next-line functional/no-let
-    let tmpDir: string;
+  it('replaces all occurrences (global flag)', () => {
+    const result = applyContentReplacementsToBuffer('a-a-a', [
+      { files: '*.md', match: 'a', replace: 'b' },
+    ]);
+    expect(result).toBe('b-b-b');
+  });
 
-    beforeEach(() => {
-      // These tests need real filesystem; restore readFileSync and mkdirSync to the actual implementation.
-      mockReadFileSync.mockImplementation(jest.requireActual<typeof fs>('node:fs').readFileSync);
-      (fs.mkdirSync as jest.Mock).mockImplementation(
-        jest.requireActual<typeof fs>('node:fs').mkdirSync,
-      );
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-check-replace-test-'));
-    });
+  it('supports regex patterns', () => {
+    const result = applyContentReplacementsToBuffer('version: 1.2.3', [
+      { files: '*.md', match: '\\d+\\.\\d+\\.\\d+', replace: 'X.Y.Z' },
+    ]);
+    expect(result).toBe('version: X.Y.Z');
+  });
 
-    afterEach(() => {
-      if (fs.existsSync(tmpDir)) {
-        fs.rmSync(tmpDir, { recursive: true });
-      }
-    });
+  it('returns original content when no replacements match', () => {
+    const result = applyContentReplacementsToBuffer('unchanged', [
+      { files: '*.md', match: 'nothere', replace: 'x' },
+    ]);
+    expect(result).toBe('unchanged');
+  });
 
-    it('returns an empty array when no contentReplacements are defined', () => {
-      const entry: NpmdataExtractEntry = { package: 'pkg', output: { path: './out' } };
-      expect(checkContentReplacements(entry, tmpDir)).toEqual([]);
-    });
+  it('returns original content when replacements array is empty', () => {
+    const result = applyContentReplacementsToBuffer('hello', []);
+    expect(result).toBe('hello');
+  });
+});
 
-    it('returns an empty array when all replacements are already applied', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(outputDir, { recursive: true });
-      fs.writeFileSync(path.join(outputDir, 'doc.md'), '<!-- version: 1.2.3 -->');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'doc.md|pkg|1.0.0|0\n');
+describe('applyContentReplacements', () => {
+  it('applies replacement to matching files on disk', async () => {
+    const filePath = path.join(tmpDir, 'README.md');
+    fs.writeFileSync(filePath, 'Hello World');
 
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: {
-          path: './out',
-          contentReplacements: [
-            { files: '*.md', match: '<!-- version: .* -->', replace: '<!-- version: 1.2.3 -->' },
-          ],
-        },
-      };
+    await applyContentReplacements(tmpDir, [{ files: '*.md', match: 'World', replace: 'npmdata' }]);
 
-      // No further changes needed – regex matches but replacement string equals its own output.
-      // Build a case where the replacement produces no diff.
-      // We write the file already containing the replacement text, so match succeeds but diff is zero.
-      expect(checkContentReplacements(entry, tmpDir)).toEqual([]);
-    });
+    expect(fs.readFileSync(filePath, 'utf8')).toBe('Hello npmdata');
+  });
 
-    it('returns paths of files where the replacement would still change content', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(outputDir, { recursive: true });
-      const filePath = path.join(outputDir, 'doc.md');
-      fs.writeFileSync(filePath, '<!-- version: 0.0.0 -->');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'doc.md|pkg|1.0.0|0\n');
+  it('no-ops when replacements array is empty', async () => {
+    const filePath = path.join(tmpDir, 'README.md');
+    fs.writeFileSync(filePath, 'Hello World');
 
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: {
-          path: './out',
-          contentReplacements: [
-            { files: '*.md', match: '<!-- version: 0.0.0 -->', replace: '<!-- version: 1.0.0 -->' },
-          ],
-        },
-      };
+    await applyContentReplacements(tmpDir, []);
 
-      const outOfSync = checkContentReplacements(entry, tmpDir);
-      expect(outOfSync).toContain(filePath);
-    });
+    expect(fs.readFileSync(filePath, 'utf8')).toBe('Hello World');
+  });
 
-    it('does not return a path when the file content would not change', () => {
-      const outputDir = path.join(tmpDir, 'out');
-      fs.mkdirSync(outputDir, { recursive: true });
-      const filePath = path.join(outputDir, 'up-to-date.md');
-      fs.writeFileSync(filePath, 'no marker here');
-      fs.writeFileSync(path.join(outputDir, '.npmdata'), 'up-to-date.md|pkg|1.0.0|0\n');
+  it('restores read-only permission after modifying read-only files', async () => {
+    const filePath = path.join(tmpDir, 'locked.md');
+    fs.writeFileSync(filePath, 'Hello World');
+    fs.chmodSync(filePath, 0o444); // make read-only
 
-      const entry: NpmdataExtractEntry = {
-        package: 'pkg',
-        output: {
-          path: './out',
-          contentReplacements: [{ files: '*.md', match: 'MARKER', replace: 'REPLACED' }],
-        },
-      };
+    await applyContentReplacements(tmpDir, [{ files: '*.md', match: 'World', replace: 'done' }]);
 
-      const outOfSync = checkContentReplacements(entry, tmpDir);
-      expect(outOfSync).not.toContain(filePath);
-    });
+    const stat = fs.statSync(filePath);
+    // eslint-disable-next-line no-bitwise
+    const isReadOnly = (stat.mode & 0o200) === 0;
+    expect(fs.readFileSync(filePath, 'utf8')).toBe('Hello done');
+    expect(isReadOnly).toBe(true);
+  });
+
+  it('skips files that do not match the glob', async () => {
+    const mdFile = path.join(tmpDir, 'README.md');
+    const tsFile = path.join(tmpDir, 'index.ts');
+    fs.writeFileSync(mdFile, 'Hello World');
+    fs.writeFileSync(tsFile, 'Hello World');
+
+    await applyContentReplacements(tmpDir, [{ files: '*.md', match: 'World', replace: 'done' }]);
+
+    expect(fs.readFileSync(tsFile, 'utf8')).toBe('Hello World');
+    expect(fs.readFileSync(mdFile, 'utf8')).toBe('Hello done');
+  });
+
+  it('recurses into subdirectories to find matching files', async () => {
+    const subDir = path.join(tmpDir, 'docs');
+    fs.mkdirSync(subDir, { recursive: true });
+    const subFile = path.join(subDir, 'guide.md');
+    fs.writeFileSync(subFile, 'Hello World');
+
+    await applyContentReplacements(tmpDir, [
+      { files: 'docs/*.md', match: 'World', replace: 'docs' },
+    ]);
+
+    expect(fs.readFileSync(subFile, 'utf8')).toBe('Hello docs');
+  });
+
+  it('skips symlinks during file collection', async () => {
+    const realFile = path.join(tmpDir, 'real.md');
+    fs.writeFileSync(realFile, 'original');
+    // Create a symlink to the real file — should be skipped during collection
+    const linkFile = path.join(tmpDir, 'link.md');
+    fs.symlinkSync(realFile, linkFile);
+
+    await applyContentReplacements(tmpDir, [
+      { files: '*.md', match: 'original', replace: 'changed' },
+    ]);
+
+    // The real file is updated; symlink is skipped so the symlink target file content depends
+    // on real.md being updated directly (not via the symlink path)
+    expect(fs.readFileSync(realFile, 'utf8')).toBe('changed');
   });
 });

@@ -1,85 +1,36 @@
 # npmdata
 
-Publish folders as npm packages and extract them in any workspace. Use it to distribute shared assets — ML datasets, documentation, ADRs, configuration files — across multiple projects through any npm-compatible registry.
+Publish folders as npm packages and extract them in any workspace. Distribute shared assets — ML datasets, documentation, ADRs, configuration files — across multiple projects through any npm-compatible registry.
 
 ## How it works
 
-- **Publisher**: a project that has folders to share. Running `init` prepares its `package.json` so those folders are included when the package is published.
-- **Consumer**: any project that installs that package and runs `extract` to download the files locally. A `.npmdata` marker file is written alongside the managed files to track ownership and enable safe updates.
+- **Publisher**: a project whose folders you want to share. Running `init` prepares its `package.json` so those folders are included when published.
+- **Consumer**: any project that installs that package and runs `extract` to pull the files locally. A `.npmdata` marker file tracks ownership and enables safe updates.
 
-## Extraction patterns
+---
 
-There are two ways to extract data with `npmdata`. Choose the one that fits your situation:
+## Scenario 1 — Ad-hoc CLI extraction
 
-### Pattern 1 — Ad-hoc CLI extraction
-
-Use `npx npmdata extract` directly from the command line whenever you need to pull files from a package without any prior setup.
+Pull files directly without any setup:
 
 ```sh
 npx npmdata extract --packages my-shared-assets@^2.0.0 --output ./data
+
+# filter by glob pattern
+npx npmdata extract --packages my-shared-assets --files "**/*.md" --output ./docs
+
+# filter by file content
+npx npmdata extract --packages my-shared-assets --content-regex "env: production" --output ./configs
+
+# preview without writing
+npx npmdata extract --packages my-shared-assets --output ./data --dry-run
 ```
 
-### Pattern 2 — Data packages with embedded configuration
+---
 
-Create a dedicated npm package whose `package.json` declares an `npmdata` config block. That config encodes the extraction sources, output directories, filtering rules, and any combination of upstream packages. Consumers install the data package and run its bundled script — they don't need to know the internals.
+## Scenario 2 — Config file in your project
 
-**Publisher** — add an `npmdata` block to the data package's `package.json`:
-
-```json
-{
-  "name": "my-org-data",
-  "version": "1.0.0",
-  "npmdata": {
-    "sets": [
-      {
-        "package": "base-datasets@^3.0.0",
-        "selector": { "files": ["datasets/**"] },
-        "output": { "path": "./data/base" }
-      },
-      {
-        "package": "org-configs@^1.2.0",
-        "selector": { "contentRegexes": ["env: production"] },
-        "output": { "path": "./configs" }
-      }
-    ]
-  }
-}
-```
-
-Run `pnpm dlx npmdata init` in that package and then `npm publish` to release it.
-
-**Consumer** — just install and run:
-
-```sh
-npx my-org-data extract --output ./local-data
-```
-
-No knowledge of the upstream packages or transformation rules is required.
-
-**When to use:** When an intermediary team (a platform, infrastructure, or data team) wants to bundle, curate, and version a collection of data from multiple sources and hand it to consumers as a single, opinionated package. Consumers get a stable, self-describing interface; producers control all the complexity.
-
-### Pattern 3 — Config file mode
-
-Add an `npmdata` configuration directly to a project's own `package.json` (or a `.npmdatarc` file) and then run `npmdata extract` without `--packages`. The CLI automatically loads the configuration and runs every entry, reusing the same runner logic as data packages.
-
-**Consumer** — declare the config inline in `package.json`:
-
-```json
-{
-  "name": "my-project",
-  "npmdata": {
-    "sets": [
-      {
-        "package": "base-datasets@^3.0.0",
-        "selector": { "files": ["datasets/**"] },
-        "output": { "path": "./data" }
-      }
-    ]
-  }
-}
-```
-
-Or write a standalone `.npmdatarc` (JSON object at the top level):
+Declare sources in `.npmdatarc` (or `package.json`) and run `extract` without `--packages`:
 
 ```json
 {
@@ -93,281 +44,160 @@ Or write a standalone `.npmdatarc` (JSON object at the top level):
 }
 ```
 
-Then run any command without `--packages`:
-
 ```sh
-npx npmdata           # same as 'npx npmdata extract'
-npx npmdata extract   # reads config, extracts all entries
-npx npmdata check     # checks all entries
-npx npmdata purge     # purges all entries
+npx npmdata extract   # reads config, extracts all sets
+npx npmdata check     # verifies files are in sync
+npx npmdata purge     # removes all managed files
 ```
 
-Config is resolved using [cosmiconfig](https://github.com/cosmiconfig/cosmiconfig). Sources searched in order from the current directory:
+After `extract`, the output directory will contain the selected files alongside a `.npmdata` marker file that tracks ownership and enables safe updates:
 
-| Source | Key / format |
-|---|---|
-| `package.json` | `"npmdata"` key — object with `"sets"` array |
-| `.npmdatarc` | JSON or YAML object with `"sets"` array |
-| `.npmdatarc.json` | JSON object with `"sets"` array |
-| `.npmdatarc.yaml` / `.npmdatarc.yml` | YAML object with `"sets"` array |
-| `npmdata.config.js` | CommonJS module exporting object with `sets` array |
+```
+./data/
+  datasets/
+    sample.csv
+    labels.csv
+  .npmdata              ← tracks file ownership (package name + version)
+```
 
-All runner flags (`--dry-run`, `--silent`, `--verbose`, `--no-gitignore`, `--unmanaged`, `--presets`, `--output`) work as usual.
-
-**When to use:** When a consuming project wants to pin and automate a set of data extractions locally without publishing a separate data package. This is the lightest-weight approach — no extra package, no `init` step, just a config block and a single CLI call.
+Config is resolved looking at files: `package.json` (`"npmdata"` key), `.npmdatarc`, `.npmdatarc.json`, `.npmdatarc.yaml`, or `npmdata.config.js`.
 
 ---
 
-## Quick start
+## Scenario 3 — Data package (curated bundle for consumers)
 
-### 1. Prepare the publisher package
+A data package bundles, filters, and versions content from multiple upstream sources. Consumers install it and run one command — no knowledge of the internals required.
 
-In the project whose folders you want to share:
+**Step 1 — Create the data package**
 
 ```sh
-# share specific folders by glob pattern (required)
-pnpm dlx npmdata init --files "docs/**,data/**,configs/**"
+# in the data package directory
+pnpm dlx npmdata init --files "docs/**,data/**"
 
-# also bundle an additional package so consumers get data from both sources
-pnpm dlx npmdata init --files "docs/**" --packages shared-configs@^1.0.0
-
-# share multiple additional packages at once
+# also pull from upstream packages
 pnpm dlx npmdata init --files "docs/**" --packages "shared-configs@^1.0.0,base-templates@2.x"
-
-# skip .gitignore entries for managed files (gitignore is enabled by default)
-pnpm dlx npmdata init --files "docs/**,data/**" --no-gitignore
-
-# mark extracted files as unmanaged so consumers can edit them freely;
-# files won't be tracked, made read-only, or added to .gitignore
-pnpm dlx npmdata init --files "templates/**" --unmanaged
 ```
 
-`init` updates `package.json` with the right `files`, `bin`, and `dependencies` fields so those folders are included when the package is published, and writes a thin `bin/npmdata.js` entry point. Then publish normally:
+`init` updates `package.json` with the right `files`, `bin`, and `dependencies` and writes a `bin/npmdata.js` entry point. Then:
 
 ```sh
 npm publish
 ```
 
-### 2. Extract files in a consumer project
-
-```sh
-# extract all files from the package
-npx npmdata extract --packages my-shared-assets --output ./data
-
-# extract from a specific version
-npx npmdata extract --packages my-shared-assets@^2.0.0 --output ./data
-
-# extract from multiple packages at once
-npx npmdata extract --packages "my-shared-assets@^2.0.0,another-pkg@1.x" --output ./data
-
-# extract only markdown files
-npx npmdata extract --packages my-shared-assets --files "**/*.md" --output ./docs
-
-# extract only files whose content matches a regex
-npx npmdata extract --packages my-shared-assets --content-regex "env: production" --output ./configs
-
-# overwrite files that are unmanaged or owned by a different package;
-# the new package takes ownership in the marker file
-npx npmdata extract --packages my-shared-assets --output ./data --force
-
-# skip .gitignore entries for managed files (gitignore is enabled by default)
-npx npmdata extract --packages my-shared-assets --output ./data --no-gitignore
-
-# write files without a .npmdata marker or .gitignore entry; files won't be read-only
-# and won't be tracked by npmdata; existing files are left unchanged
-npx npmdata extract --packages my-shared-assets --output ./data --unmanaged
-
-# preview what would change without writing any files
-npx npmdata extract --packages my-shared-assets --output ./data --dry-run
-
-# force-reinstall the package even if already installed (e.g. after a floating tag moves)
-npx npmdata extract --packages my-shared-assets@latest --output ./data --upgrade
-```
-
-`extract` logs every file change as it happens:
-
-```
-A	data/users-dataset/user1.json
-M	data/configs/app.config.json
-D	data/old-file.json
-```
-
-If the published package includes its own bin script (normally when it's prepared using "init") you can also call it directly so it extracts data that is inside the package itself:
-
-```sh
-npx my-shared-assets extract --output ./data
-npx my-shared-assets check  --output ./data
-```
-
-When the data package defines multiple `npmdata` entries in its `package.json`, you can limit which entries are processed using the `--presets` option. Only entries whose `presets` list includes at least one of the requested presets will be extracted; entries with no presets are skipped when a preset filter is active.
-
-```sh
-# run only entries tagged with "prod"
-npx my-shared-assets --presets prod
-
-# run entries tagged with either "prod" or "staging"
-npx my-shared-assets --presets prod,staging
-```
-
-To use presets, add a `presets` array to each `npmdata` entry in the data package's `package.json`:
+**Step 2 — Add configuration to the data package's `package.json`**
 
 ```json
 {
+  "name": "my-org-configs",
+  "version": "1.0.0",
   "npmdata": {
     "sets": [
-      { "package": "my-shared-assets", "output": { "path": "./data" }, "presets": ["prod"] },
-      { "package": "my-dev-assets",    "output": { "path": "./dev-data" }, "presets": ["dev", "staging"] }
+      {
+        "package": "base-datasets@^3.0.0",
+        "selector": { "files": ["datasets/**"] },
+        "output": { "path": "./data/base" },
+        "presets": ["prod"]
+      },
+      {
+        "package": "org-configs@^1.2.0",
+        "selector": { "contentRegexes": ["env: production"] },
+        "output": { "path": "./configs" },
+        "presets": ["prod", "staging"]
+      }
     ]
   }
 }
 ```
 
-Check the /examples folder to see this in action
-
-### Data package CLI options
-
-When calling the bin script bundled in a data package, the following options are accepted. Options that overlap with per-entry settings override every entry globally, regardless of what is set in `package.json`.
-
-| Option | Description |
-|---|---|
-| `--output, -o <dir>` | Base directory for resolving all `output.path` values (default: cwd). |
-| `--presets <preset1,preset2>` | Limit to entries whose `presets` overlap with the given list (comma-separated). |
-| `--no-gitignore` | Disable `.gitignore` management for every entry, overriding each entry's `gitignore` field. |
-| `--unmanaged` | Run every entry in unmanaged mode, overriding each entry's `unmanaged` field. Files are written without a `.npmdata` marker, without `.gitignore` updates, and without being made read-only. |
-| `--dry-run` | Simulate changes without writing or deleting any files. |
-| `--verbose, -v` | Print detailed progress information for each step. |
+**Step 3 — Consumer installs and runs**
 
 ```sh
-# disable gitignore management across all entries
-npx my-shared-assets --no-gitignore
+# Extract all files from this curated package to current dir
+npx my-org-configs extract
 
-# write all files as unmanaged (editable, not tracked)
-npx my-shared-assets --unmanaged
-
-# combine overrides
-npx my-shared-assets --no-gitignore --unmanaged --dry-run
+# limit to a preset
+npx my-org-configs extract --output ./local-data --presets prod
 ```
 
-### npmdata entry options reference
+---
 
-Each entry in the `npmdata.sets` array in `package.json` supports the following options:
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `package` | `string` | required | Package spec to install and extract. Either a bare name (`my-pkg`) or with a semver constraint (`my-pkg@^1.2.3`). |
-| `output.path` | `string` | required | Directory where files will be extracted, relative to where the consumer runs the command. |
-| `selector.files` | `string[]` | all files | Glob patterns to filter which files are extracted (e.g. `["data/**", "*.json"]`). |
-| `selector.contentRegexes` | `string[]` | none | Regex patterns (as strings) to filter files by content. Only files matching at least one pattern are extracted. |
-| `output.force` | `boolean` | `false` | Allow overwriting existing unmanaged files or files owned by a different package. |
-| `output.keepExisting` | `boolean` | `false` | Skip files that already exist but create them when absent. Cannot be combined with `force`. |
-| `output.gitignore` | `boolean` | `true` | Create/update a `.gitignore` file alongside each `.npmdata` marker file. Set to `false` to disable. |
-| `output.unmanaged` | `boolean` | `false` | Write files without a `.npmdata` marker, `.gitignore` update, or read-only flag. Existing files are skipped. |
-| `output.dryRun` | `boolean` | `false` | Simulate extraction without writing anything to disk. |
-| `upgrade` | `boolean` | `false` | Force a fresh install of the package even when a satisfying version is already installed. |
-| `silent` | `boolean` | `false` | Suppress per-file output, printing only the final result line. |
-| `presets` | `string[]` | none | Presets used to group and selectively run entries with `--presets`. |
-| `output.symlinks` | `SymlinkConfig[]` | none | Post-extract symlink operations (see below). |
-| `output.contentReplacements` | `ContentReplacementConfig[]` | none | Post-extract content-replacement operations (see below). |
-
-#### SymlinkConfig
-
-After extraction, for each config the runner resolves all files/directories inside `output.path` that match `source` and creates a corresponding symlink inside `target`. Stale symlinks pointing into `output.path` but no longer matched are removed automatically.
-
-| Field | Type | Description |
-|---|---|---|
-| `source` | `string` | Glob pattern relative to `output.path`. Every matching file or directory gets a symlink in `target`. Example: `"**\/skills\/**"` |
-| `target` | `string` | Directory where symlinks are created, relative to the project root. Example: `".github/skills"` |
-
-#### ContentReplacementConfig
-
-After extraction, for each config the runner finds workspace files matching `files` and applies the regex replacement to their contents.
-
-| Field | Type | Description |
-|---|---|---|
-| `files` | `string` | Glob pattern (relative to the project root) selecting workspace files to modify. Example: `"docs/**\/*.md"` |
-| `match` | `string` | Regex string locating the text to replace. Applied globally to all non-overlapping occurrences. Example: `"<!-- version: .* -->"` |
-| `replace` | `string` | Replacement string. May contain regex back-references such as `$1`. Example: `"<!-- version: 1.2.3 -->"` |
-
-Example with multiple options:
-
-```json
-{
-  "npmdata": [
-    {
-      "package": "my-shared-assets@^2.0.0",
-      "selector": {
-        "files": ["docs/**", "configs/*.json"]
-      },
-      "output": {
-        "path": "./data",
-        "gitignore": true,
-        "symlinks": [
-          { "source": "**\/skills\/**", "target": ".github/skills" }
-        ],
-        "contentReplacements": [
-          { "files": "docs/**\/*.md", "match": "<!-- version: .* -->", "replace": "<!-- version: 2.0.0 -->" }
-        ]
-      },
-      "upgrade": true,
-      "presets": ["prod"]
-    }
-  ]
-}
-```
-
-### 3. Check files are in sync
+## All extract options
 
 ```sh
+npx npmdata extract --packages my-pkg@^2.0.0 --output ./data   # specific version
+npx npmdata extract --packages "pkg-a,pkg-b@1.x" --output ./data  # multiple packages
+npx npmdata extract --packages my-pkg --output ./data --force   # overwrite unmanaged files
+npx npmdata extract --packages my-pkg --output ./data --unmanaged  # skip tracking
+npx npmdata extract --packages my-pkg@latest --output ./data --upgrade  # force reinstall
+npx npmdata extract --packages my-pkg --output ./data --no-gitignore  # skip .gitignore
+npx npmdata extract --packages my-pkg --output ./data --dry-run  # preview only
+```
+
+`extract` logs every file change:
+```
+A  data/users-dataset/user1.json
+M  data/configs/app.config.json
+D  data/old-file.json
+```
+
+---
+
+## Check, list and purge
+
+```sh
+# verify files are in sync (exit 0 = ok, exit 2 = differences)
 npx npmdata check --packages my-shared-assets --output ./data
-# exit 0 = in sync, exit 2 = differences found
 
-# check multiple packages
-npx npmdata check --packages "my-shared-assets,another-pkg" --output ./data
-```
-
-The check command reports differences per package:
-
-```
-  my-shared-assets@2.1.0: out of sync
-    - missing:  data/new-file.json
-    ~ modified: data/configs/app.config.json
-    + extra:    data/old-file.json
-```
-
-### 4. List managed files
-
-```sh
-# list all files managed by npmdata in an output directory
+# list all managed files grouped by package
 npx npmdata list --output ./data
-```
 
-Output is grouped by package:
-
-```
-my-shared-assets@2.1.0
-  data/users-dataset/user1.json
-  data/configs/app.config.json
-
-another-pkg@1.0.0
-  data/other-file.txt
-```
-
-### 5. Purge managed files
-
-Remove all files previously extracted by one or more packages without touching any other files in the output directory. No network access or package installation is required — only the local `.npmdata` marker state is used.
-
-```sh
-# remove all files managed by a package
+# remove managed files (no network required)
 npx npmdata purge --packages my-shared-assets --output ./data
-
-# purge multiple packages at once
-npx npmdata purge --packages "my-shared-assets,another-pkg" --output ./data
-
-# preview what would be deleted without removing anything
 npx npmdata purge --packages my-shared-assets --output ./data --dry-run
 ```
 
-After a purge, the corresponding entries are removed from the `.npmdata` marker file and any empty directories are cleaned up. `.gitignore` sections written by `extract` are also removed.
+---
+
+## Entry options reference
+
+Each entry in `npmdata.sets` supports:
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `package` | `string` | required | Package spec: `my-pkg` or `my-pkg@^1.2.3` |
+| `output.path` | `string` | required | Extraction directory, relative to where the command runs |
+| `selector.files` | `string[]` | all files | Glob patterns to filter extracted files |
+| `selector.contentRegexes` | `string[]` | none | Regex patterns to filter files by content |
+| `output.force` | `boolean` | `false` | Overwrite unmanaged or foreign-owned files |
+| `output.keepExisting` | `boolean` | `false` | Skip files that already exist; create them when absent |
+| `output.gitignore` | `boolean` | `true` | Write `.gitignore` alongside managed files |
+| `output.unmanaged` | `boolean` | `false` | Write files without tracking (no marker, no read-only) |
+| `output.dryRun` | `boolean` | `false` | Simulate without writing |
+| `upgrade` | `boolean` | `false` | Force fresh package install |
+| `presets` | `string[]` | none | Tags for selective execution via `--presets` |
+| `output.symlinks` | `SymlinkConfig[]` | none | Post-extract symlink operations |
+| `output.contentReplacements` | `ContentReplacementConfig[]` | none | Post-extract content replacements |
+
+### SymlinkConfig
+
+Creates symlinks after extraction. Stale symlinks pointing into `output.path` are removed automatically.
+
+| Field | Type | Description |
+|---|---|---|
+| `source` | `string` | Glob relative to `output.path` |
+| `target` | `string` | Directory for symlinks, relative to project root |
+
+### ContentReplacementConfig
+
+Applies regex replacements to workspace files after extraction.
+
+| Field | Type | Description |
+|---|---|---|
+| `files` | `string` | Glob selecting files to modify |
+| `match` | `string` | Regex locating the text to replace |
+| `replace` | `string` | Replacement string (supports `$1` back-references) |
+
+---
 
 ## CLI reference
 
@@ -375,181 +205,77 @@ After a purge, the corresponding entries are removed from the `.npmdata` marker 
 Usage:
   npx npmdata [init|extract|check|list|purge] [options]
 
-Commands:
-  init      Set up publishing configuration in a package
-  extract   Extract files from a published package into a local directory
-  check     Verify local files are in sync with the published package
-  list      List all files managed by npmdata in an output directory
-  purge     Remove all managed files previously extracted by given packages
+Init:     --files <patterns>    Glob patterns of files to publish (required)
+          --packages <specs>    Additional upstream packages to bundle
+          --no-gitignore        Skip .gitignore entries
+          --unmanaged           Mark all entries as unmanaged
 
-Global options:
-  --help, -h       Show help
-  --version        Show version
+Extract:  --packages <specs>    Package specs (omit to read from config file)
+          --output, -o <dir>    Output directory (default: cwd)
+          --files <patterns>    Filter files by glob
+          --content-regex <rx>  Filter files by content
+          --force               Overwrite unmanaged/foreign files
+          --keep-existing       Skip existing files
+          --no-gitignore        Skip .gitignore management
+          --unmanaged           Write without tracking
+          --dry-run             Preview without writing
+          --upgrade             Reinstall even if present
+          --verbose, -v         Detailed progress output
+          --silent              Final result line only
 
-Init options:
-  --files <patterns>       Comma-separated glob patterns of files to publish (required)
-                           e.g. "docs/**,data/**,configs/*.json"
-  --packages <specs>       Comma-separated additional package specs to bundle as data sources.
-                           Each spec is "name" or "name@version", e.g.
-                           "shared-configs@^1.0.0,base-templates@2.x".
-                           Listed under `npmdata.additionalPackages` in package.json and
-                           added to `dependencies` so consumers pull data from all of them.
-  --no-gitignore           Skip adding .gitignore entries for managed files
-                           (gitignore is enabled by default)
-  --unmanaged              Mark all generated npmdata entries as unmanaged: extracted files
-                           are written without a .npmdata marker, without updating .gitignore,
-                           and without being made read-only. Existing files are skipped.
+Check:    --packages <specs>    Same format as extract
+          --output, -o <dir>    Directory to check
 
-Extract options:
-  --packages <specs>       Comma-separated package specs.
-                           When omitted, npmdata searches for a configuration file
-                           (package.json "npmdata" key, .npmdatarc, etc.) and runs all
-                           entries defined there.
-                           Each spec is "name" or "name@version", e.g.
-                           "my-pkg@^1.0.0,other-pkg@2.x"
-  --output, -o <dir>       Output directory (default: current directory)
-  --force                  Overwrite existing unmanaged files or files owned by a different package
-  --keep-existing          Skip files that already exist; create them when absent. Cannot be
-                           combined with --force
-  --no-gitignore           Skip creating/updating .gitignore (gitignore is enabled by default)
-  --unmanaged              Write files without a .npmdata marker, .gitignore update, or read-only
-                           flag. Existing files are skipped. Files can be freely edited afterwards
-                           and are not tracked by npmdata.
-  --files <patterns>       Comma-separated glob patterns to filter files
-  --content-regex <regex>  Regex to filter files by content
-  --dry-run                Preview changes without writing any files
-  --upgrade                Reinstall the package even if already present
-  --silent                 Print only the final result line, suppressing per-file output
-  --verbose, -v            Print detailed progress information for each step
+Purge:    --packages <specs>    Package names to purge
+          --output, -o <dir>    Directory to purge from
+          --dry-run             Preview without deleting
+          --silent              Suppress per-file output
 
-Check options:
-  --packages <specs>       Same format as extract.
-                           When omitted, reads from a configuration file (see Pattern 3).
-  --output, -o <dir>       Output directory to check (default: current directory)
-
-Purge options:
-  --packages <specs>       Comma-separated package names whose managed files should be removed.
-                           When omitted, reads from a configuration file (see Pattern 3).
-  --output, -o <dir>       Output directory to purge from (default: current directory)
-  --dry-run                Simulate purge without removing any files
-  --silent                 Suppress per-file output
-
-List options:
-  --output, -o <dir>       Output directory to inspect (default: current directory)
+List:     --output, -o <dir>    Directory to inspect
 ```
 
-## Library usage
+---
 
-`npmdata` also exports a programmatic API:
+## Programmatic API
 
 ```typescript
-import { extract, check, list, purge, initPublisher, parsePackageSpec, isBinaryFile } from 'npmdata';
-import type { ConsumerConfig, ConsumerResult, CheckResult, PurgeConfig, ProgressEvent } from 'npmdata';
+import { extract, check, list, purge, initPublisher } from 'npmdata';
+import type { ProgressEvent } from 'npmdata';
 
-// extract files from one package
+// extract files
 const result = await extract({
   packages: ['my-shared-assets@^2.0.0'],
   outputDir: './data',
-  gitignore: true,
 });
 console.log(result.added, result.modified, result.deleted);
 
-// dry-run: preview changes without writing files
-const preview = await extract({
-  packages: ['my-shared-assets@^2.0.0'],
-  outputDir: './data',
-  dryRun: true,
-});
-console.log('Would add', preview.added, 'files');
-
-// force-reinstall the package even if already present
-await extract({
-  packages: ['my-shared-assets@latest'],
-  outputDir: './data',
-  upgrade: true,
-});
-
-// extract without npmdata tracking: files are writable, no .npmdata marker is written,
-// no .gitignore entry is created. Existing files are left untouched (skipped).
-await extract({
-  packages: ['shared-templates'],
-  outputDir: './templates',
-  unmanaged: true,
-});
-
-// track progress file-by-file
+// track progress
 await extract({
   packages: ['my-shared-assets@^2.0.0'],
   outputDir: './data',
   onProgress: (event: ProgressEvent) => {
-    if (event.type === 'file-added')   console.log('A', event.file);
+    if (event.type === 'file-added')    console.log('A', event.file);
     if (event.type === 'file-modified') console.log('M', event.file);
-    if (event.type === 'file-deleted') console.log('D', event.file);
+    if (event.type === 'file-deleted')  console.log('D', event.file);
   },
 });
 
-// extract files from multiple packages into the same output directory
-const multiResult = await extract({
-  packages: ['my-shared-assets@^2.0.0', 'another-pkg@1.x'],
-  outputDir: './data',
-});
-
-// check sync status — per-package breakdown
-const status = await check({
-  packages: ['my-shared-assets'],
-  outputDir: './data',
-});
+// check sync status
+const status = await check({ packages: ['my-shared-assets'], outputDir: './data' });
 if (!status.ok) {
   console.log('Missing:', status.differences.missing);
   console.log('Modified:', status.differences.modified);
-  console.log('Extra:', status.differences.extra);
-  for (const pkg of status.sourcePackages) {
-    if (!pkg.ok) {
-      console.log(pkg.name, 'missing:', pkg.differences.missing);
-      console.log(pkg.name, 'modified:', pkg.differences.modified);
-      console.log(pkg.name, 'extra:', pkg.differences.extra);
-    }
-  }
 }
 
-// remove all files previously extracted by a package (no network required)
-await purge({
-  packages: ['my-shared-assets'],
-  outputDir: './data',
-});
+// remove managed files (no network required)
+await purge({ packages: ['my-shared-assets'], outputDir: './data' });
 
-// dry-run: preview what would be deleted without removing anything
-const purgePreview = await purge({
-  packages: ['my-shared-assets'],
-  outputDir: './data',
-  dryRun: true,
-});
-console.log('Would delete', purgePreview.deleted, 'files');
-
-// track progress during purge
-await purge({
-  packages: ['my-shared-assets'],
-  outputDir: './data',
-  onProgress: (event: ProgressEvent) => {
-    if (event.type === 'file-deleted') console.log('D', event.file);
-  },
-});
-
-// list all files managed by npmdata in an output directory
+// list managed files
 const managed = list('./data');
-// managed is Array<{ packageName: string; packageVersion: string; files: string[] }>
-
-// initialize a publisher package
-await initPublisher(['docs', 'data'], { workingDir: './my-package' });
-
-// utility: parse a package spec string
-const { name, version } = parsePackageSpec('my-pkg@^1.0.0');
-
-// utility: detect whether a file is binary
-const binary = isBinaryFile('/path/to/file.bin');
+// Array<{ packageName: string; packageVersion: string; files: string[] }>
 ```
 
-### `ProgressEvent` type
+### ProgressEvent
 
 ```typescript
 type ProgressEvent =
@@ -561,60 +287,10 @@ type ProgressEvent =
   | { type: 'file-skipped';  packageName: string; file: string };
 ```
 
-See the root [README.md](../README.md) for the full documentation.
+---
 
 ## Managed file tracking
 
-Extracted files are set read-only (`444`) and tracked in a `.npmdata` marker file in each output directory. On subsequent extractions:
+Extracted files are set read-only (`444`) and tracked in a `.npmdata` marker file per output directory. On subsequent extractions, unchanged files are skipped, updated files are overwritten, and files removed from the package are deleted locally. Multiple packages can coexist in the same output directory — each owns its files.
 
-- Unchanged files are skipped.
-- Updated files are overwritten.
-- Files removed from the package are deleted locally.
-
-The marker file uses a `|`-delimited format; files written by older versions of `npmdata` using the comma-delimited format are read correctly for backward compatibility.
-
-Multiple packages can coexist in the same output directory; each owns its own files.
-
-## Developer Notes
-
-### Module overview
-
-| Module | Purpose |
-|---|---|
-| `publisher.ts` | `initPublisher()` — scaffolds a publishable package (updates `package.json`, generates bin script) |
-| `consumer.ts` | `extract()` and `check()` — installs a package from the registry, copies files, manages marker files |
-| `runner.ts` | Entry point injected into the generated bin script; delegates to the CLI |
-| `cli.ts` / `main.ts` | CLI parsing and top-level entry point |
-| `utils.ts` | File I/O helpers: glob matching via `minimatch`, SHA-256 hashing, CSV marker read/write, package manager detection |
-| `types.ts` | Shared TypeScript types and constants (e.g. `DEFAULT_FILENAME_PATTERNS`) |
-
-### Publish side (`publisher.ts`)
-
-`initPublisher()` modifies the target `package.json` to include `files`, `bin`, and `dependencies` fields, then writes a thin `bin/npmdata.js` that calls `runner.run(__dirname)`. The generated script is kept minimal on purpose — all logic lives in this library.
-
-### Consumer side (`consumer.ts`)
-
-`extract()` flow:
-1. Detects the package manager (`pnpm` / `yarn` / `npm`) via lock-file presence.
-2. For each entry in `config.packages`, parses the spec (`name` or `name@version`) and runs `<pm> add <package>@<version>` to resolve the package.
-3. Iterates matching files (glob + optional content regex) from each installed package.
-4. Copies files into `outputDir`, tracking state in a `.npmdata` pipe-delimited marker file per output directory.
-5. Optionally writes a `.gitignore` section around the managed files.
-
-`check()` performs the same resolution for each package in `config.packages` but compares SHA-256 hashes without writing any files.
-
-### Marker file (`.npmdata`)
-
-Each output directory that contains managed files gets a `.npmdata` pipe-delimited file. Columns: `path`, `packageName`, `packageVersion`, `force`. This is the source of truth for ownership tracking and clean removal.
-
-### Key design decisions
-
-- No runtime dependencies beyond `semver` and `minimatch` to keep the consumer install footprint small.
-- File identity is tracked by path + hash, not by timestamp, to be deterministic across machines.
-- The bin script generated by `initPublisher` contains no logic; all behaviour is versioned inside this library.
-
-### Dev workflow
-
-```
-make build lint-fix test
-```
+See [examples/](examples/) for working samples.

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      eslint:
+        specifier: ^8.57.1
+        version: 8.57.1
       example-files-package:
         specifier: file:../mypackage/dist/example-files-package-1.0.0.tgz
         version: file:../mypackage/dist/example-files-package-1.0.0.tgz
@@ -202,7 +205,7 @@ packages:
     engines: {node: '>=0.10.0'}
 
   example-files-package@file:../mypackage/dist/example-files-package-1.0.0.tgz:
-    resolution: {integrity: sha512-0ZwYzmxVn1xhLUloEzbSjjHOnubxyamVV/6u4aQJKH958dWdsklv+98AccN+pN2ccdBrmndRblchhyioFXKnKQ==, tarball: file:../mypackage/dist/example-files-package-1.0.0.tgz}
+    resolution: {integrity: sha512-K9PfQHFKPr7Q73vNXxQgFRYi4Q2Lqk/MWGjs6fY3saaXByLHOjvPaNqHN+8fhRc4kxKch7idBLdQpLO244zcUA==, tarball: file:../mypackage/dist/example-files-package-1.0.0.tgz}
     version: 1.0.0
     hasBin: true
 
@@ -230,8 +233,8 @@ packages:
     resolution: {integrity: sha512-CYcENa+FtcUKLmhhqyctpclsq7QF38pKjZHsGNiSQF5r4FtoKDWabFDl3hzaEQMvT1LHEysw5twgLvpYYb4vbw==}
     engines: {node: ^10.12.0 || >=12.0.0}
 
-  flatted@3.3.4:
-    resolution: {integrity: sha512-3+mMldrTAPdta5kjX2G2J7iX4zxtnwpdA8Tr2ZSjkyPSanvbZAcy6flmtnXbEybHrDcU9641lxrMfFuUxVz9vA==}
+  flatted@3.4.1:
+    resolution: {integrity: sha512-IxfVbRFVlV8V/yRaGzk0UVIcsKKHMSfYw66T/u4nTwlWteQePsxe//LjudR1AMX4tZW3WFCh3Zqa/sjlqpbURQ==}
 
   fs.realpath@1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
@@ -342,16 +345,19 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
+  mypkg@1.0.0:
+    resolution: {integrity: sha512-bUYxZK4prscFYS4f1NYXcZ+TJBjsx+BSdMA+7F3gXGdBRHCDBdVZS5vIlnEWzYuL2jeVNyJZWlFfTmLZMEOh8g==}
+
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
 
   npmdata@file:../../lib/dist/npmdata-0.0.1.tgz:
-    resolution: {integrity: sha512-+PZPOJB2a6wNEJhf09wXZ1/bAKcDs37vmuOAzU7bEmMi7p7FRZ9q39HQrSf/5IpTq6wjXtsaAHPtfiAJE2b7+g==, tarball: file:../../lib/dist/npmdata-0.0.1.tgz}
+    resolution: {integrity: sha512-MqFZNRhV6cEU/4vdAhz0+B2MzBoJQX3n7KYm3F1vteWNTY8T4nv3BebDnrbx9nQCD1rmtLEn13+YuetoMEHbVQ==, tarball: file:../../lib/dist/npmdata-0.0.1.tgz}
     version: 0.0.1
     hasBin: true
 
   npmdata@file:../lib/dist/npmdata-0.0.1.tgz:
-    resolution: {integrity: sha512-+PZPOJB2a6wNEJhf09wXZ1/bAKcDs37vmuOAzU7bEmMi7p7FRZ9q39HQrSf/5IpTq6wjXtsaAHPtfiAJE2b7+g==, tarball: file:../lib/dist/npmdata-0.0.1.tgz}
+    resolution: {integrity: sha512-MqFZNRhV6cEU/4vdAhz0+B2MzBoJQX3n7KYm3F1vteWNTY8T4nv3BebDnrbx9nQCD1rmtLEn13+YuetoMEHbVQ==, tarball: file:../lib/dist/npmdata-0.0.1.tgz}
     version: 0.0.1
     hasBin: true
 
@@ -711,11 +717,11 @@ snapshots:
 
   flat-cache@3.2.0:
     dependencies:
-      flatted: 3.3.4
+      flatted: 3.4.1
       keyv: 4.5.4
       rimraf: 3.0.2
 
-  flatted@3.3.4: {}
+  flatted@3.4.1: {}
 
   fs.realpath@1.0.0: {}
 
@@ -811,6 +817,8 @@ snapshots:
 
   ms@2.1.3: {}
 
+  mypkg@1.0.0: {}
+
   natural-compare@1.4.0: {}
 
   npmdata@file:../../lib/dist/npmdata-0.0.1.tgz:
@@ -818,6 +826,7 @@ snapshots:
       cosmiconfig: 9.0.1
       ignore: 7.0.5
       minimatch: 10.2.4
+      mypkg: 1.0.0
       semver: 7.7.4
     transitivePeerDependencies:
       - typescript
@@ -827,6 +836,7 @@ snapshots:
       cosmiconfig: 9.0.1
       ignore: 7.0.5
       minimatch: 10.2.4
+      mypkg: 1.0.0
       semver: 7.7.4
     transitivePeerDependencies:
       - typescript

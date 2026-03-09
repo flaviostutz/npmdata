@@ -1,20 +1,14 @@
-export { run, runEntries } from './runner';
-export {
-  parseOutputFromArgv,
-  parseDryRunFromArgv,
-  parseSilentFromArgv,
-  parseVerboseFromArgv,
-  parseNoGitignoreFromArgv,
-  parseUnmanagedFromArgv,
-  parsePresetsFromArgv,
-  filterEntriesByPresets,
-} from './argv';
-export { collectAllPresets, printHelp } from './help';
-export {
-  buildExtractCommand,
-  buildCheckCommand,
-  buildListCommand,
-  buildPurgeCommand,
-} from './commands';
-export { applySymlinks } from './symlinks';
-export { applyContentReplacements, checkContentReplacements } from './content-replacements';
+// Public package-layer API
+export { actionExtract } from './action-extract';
+export type { ExtractOptions, ExtractResult } from './action-extract';
+
+export { actionCheck } from './action-check';
+export type { CheckOptions, CheckSummary } from './action-check';
+
+export { actionList } from './action-list';
+export type { ListOptions } from './action-list';
+
+export { actionPurge } from './action-purge';
+export type { PurgeOptions, PurgeSummary } from './action-purge';
+
+export { mergeSelectorConfig, mergeOutputConfig } from './config-merge';

@@ -1,69 +1,94 @@
+/* eslint-disable no-restricted-syntax */
 /* eslint-disable no-console */
-import { NpmdataExtractEntry } from '../types';
 
-import { buildCheckCommand } from './commands';
-import { checkContentReplacements } from './content-replacements';
-import { runCommandCapture } from './action-extract';
+import path from 'node:path';
 
-export function runCheck(
-  entries: NpmdataExtractEntry[],
-  cliPath: string,
-  runCwd: string,
-  verboseFromArgv: boolean,
-  unmanagedFromArgv: boolean,
-): void {
-  const managedEntries = entries.filter((entry) => {
-    const isUnmanaged = entry.output?.unmanaged || unmanagedFromArgv;
-    if (isUnmanaged && verboseFromArgv) {
-      console.log(
-        `[verbose] check: skipping unmanaged entry package=${entry.package} outputDir=${entry.output.path}`,
-      );
-    }
-    return !isUnmanaged;
-  });
-  if (verboseFromArgv) {
+import { NpmdataConfig, NpmdataExtractEntry, ProgressEvent } from '../types';
+import { parsePackageSpec, getInstalledPackagePath } from '../utils';
+import { readOutputDirMarker } from '../fileset/markers';
+import { checkFileset } from '../fileset/check';
+
+export type CheckOptions = {
+  entries: NpmdataExtractEntry[];
+  config: NpmdataConfig | null;
+  cwd: string;
+  verbose?: boolean;
+  onProgress?: (event: ProgressEvent) => void;
+  skipUnmanaged?: boolean;
+};
+
+export type CheckSummary = {
+  missing: string[];
+  modified: string[];
+  extra: string[];
+};
+
+/**
+ * Orchestrate check across all filesets, filtering out unmanaged entries.
+ * Returns a summary of all drift found across all entries.
+ */
+export async function actionCheck(options: CheckOptions): Promise<CheckSummary> {
+  const { entries, cwd, verbose = false, onProgress } = options;
+  const summary: CheckSummary = { missing: [], modified: [], extra: [] };
+
+  if (verbose) {
     console.log(
-      `[verbose] check: verifying ${managedEntries.length} entr${managedEntries.length === 1 ? 'y' : 'ies'} (cwd: ${runCwd})`,
+      `[verbose] check: verifying ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (cwd: ${cwd})`,
     );
   }
-  let outOfSyncFiles: string[] = [];
-  let checkIndex = 0;
-  for (const entry of managedEntries) {
-    if (checkIndex > 0) {
-      process.stdout.write('\n');
-    }
-    checkIndex += 1;
-    if (verboseFromArgv) {
+
+  for (const entry of entries) {
+    // Skip unmanaged entries — they write no marker so there is nothing to check.
+    // The --unmanaged flag also suppresses checking for explicitly marked entries.
+    if (entry.output.unmanaged) continue;
+
+    const pkg = parsePackageSpec(entry.package);
+    const outputDir = path.resolve(cwd, entry.output.path);
+
+    if (verbose) {
       console.log(
         `[verbose] check: checking package=${entry.package} outputDir=${entry.output.path}`,
       );
     }
-    const effectiveEntry: NpmdataExtractEntry = {
-      ...entry,
-      verbose: entry.verbose || verboseFromArgv,
-    };
-    const command = buildCheckCommand(cliPath, effectiveEntry, runCwd);
-    if (verboseFromArgv) {
-      console.log(`[verbose] check: running command: ${command}`);
+
+    onProgress?.({
+      type: 'package-start',
+      packageName: pkg.name,
+      packageVersion: pkg.version ?? 'latest',
+    });
+
+    // Check if package is installed
+    const pkgPath = getInstalledPackagePath(pkg.name, cwd);
+
+    // Read existing marker
+    // eslint-disable-next-line no-await-in-loop
+    const existingMarker = await readOutputDirMarker(outputDir);
+
+    if (!pkgPath) {
+      console.error(`Package ${pkg.name} is not installed. Run 'extract' first.`);
+      summary.missing.push(...existingMarker.map((m) => m.path));
+      continue;
     }
-    const { exitCode: checkExitCode } = runCommandCapture(command, runCwd);
-    if (checkExitCode !== 0) {
-      throw Object.assign(new Error('check failed'), { status: checkExitCode });
-    }
-    if (verboseFromArgv) {
-      console.log(`[verbose] check: checking content replacements for ${entry.package}`);
-    }
-    const entryOutOfSync = checkContentReplacements(entry, runCwd);
-    for (const f of entryOutOfSync) {
-      process.stderr.write(`content-replacement out of sync: ${f}\n`);
-    }
-    // eslint-disable-next-line functional/immutable-data
-    outOfSyncFiles = [...outOfSyncFiles, ...entryOutOfSync];
+
+    // eslint-disable-next-line no-await-in-loop
+    const result = await checkFileset(
+      pkgPath,
+      outputDir,
+      entry.selector ?? {},
+      entry.output,
+      existingMarker,
+    );
+
+    summary.missing.push(...result.missing);
+    summary.modified.push(...result.modified);
+    summary.extra.push(...result.extra);
+
+    onProgress?.({
+      type: 'package-end',
+      packageName: pkg.name,
+      packageVersion: pkg.version ?? 'latest',
+    });
   }
-  if (outOfSyncFiles.length > 0) {
-    throw Object.assign(new Error('content-replacements out of sync'), { status: 1 });
-  }
-  if (managedEntries.length > 1) {
-    process.stdout.write(`\nTotal checked: ${managedEntries.length} packages\n`);
-  }
+
+  return summary;
 }

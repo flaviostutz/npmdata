@@ -8,6 +8,6 @@
     "lib": ["es2021"],
     "downlevelIteration": true
   },
-  "include": ["src", ".eslintrc.js", "jest.config.js"],
+  "include": ["src", ".eslintrc.js", "jest.config.js", "bin/cli/main.ts", "bin/cli/index.ts", "bin/cli/publisher.ts", "bin/cli/types.ts", "bin/cli/utils.ts", "bin/cli/publisher.test.ts", "bin/cli/utils.test.ts"],
   "exclude": ["node_modules"]
 }
