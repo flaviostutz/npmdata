@@ -2,6 +2,25 @@
 
 Publish folders as npm packages and extract them in any workspace. Distribute shared assets — ML datasets, documentation, ADRs, configuration files — across multiple projects through any npm-compatible registry.
 
+## Getting Started
+
+```sh
+# extract files from any npm package into a local directory
+npx npmdata extract --packages my-shared-assets@^2.0.0 --output ./data
+```
+
+```typescript
+import { extract } from 'npmdata';
+
+const result = await extract({
+  packages: ['my-shared-assets@^2.0.0'],
+  outputDir: './data',
+});
+console.log(result.added, result.modified, result.deleted);
+```
+
+---
+
 ## How it works
 
 - **Publisher**: a project whose folders you want to share. Running `init` prepares its `package.json` so those folders are included when published.

@@ -1,16 +1,13 @@
-name: publish
+name: ci
 
 on:
   push:
-    tags:
-      - '*'
-
-permissions:
-  contents: read
-  id-token: write
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  publish:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,4 +15,3 @@ jobs:
       - run: make build
       - run: make lint
       - run: make test
-      - run: make publish
