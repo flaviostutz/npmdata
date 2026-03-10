@@ -65,6 +65,9 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
   try {
     for (const entry of entries) {
+      if (!entry.package) {
+        throw new Error('Each set entry must have a "package" field.');
+      }
       const pkg = parsePackageSpec(entry.package);
 
       // Circular dependency detection
@@ -74,9 +77,9 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
         );
       }
 
-      const outputDir = path.resolve(cwd, entry.output.path);
+      const outputDir = path.resolve(cwd, entry.output?.path ?? '.');
       const selector: SelectorConfig = entry.selector ?? {};
-      const outputConfig: OutputConfig = entry.output;
+      const outputConfig: OutputConfig = entry.output ?? {};
       const contentReplacements = outputConfig.contentReplacements ?? [];
 
       onProgress?.({
@@ -87,7 +90,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
       if (verbose) {
         console.log(
-          `[verbose] extract: entry package=${entry.package} outputDir=${entry.output.path}`,
+          `[verbose] extract: entry package=${entry.package} outputDir=${entry.output?.path ?? '.'}`,
         );
       }
 
@@ -219,10 +222,10 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
           // Inherit caller overrides (force, dryRun, keepExisting) from current entry
           const inheritedEntries = filteredSets.map((depEntry) => {
-            const { path: depPath, ...restOutput } = depEntry.output;
+            const { path: depPath, ...restOutput } = depEntry.output ?? {};
             const inheritedOutput = {
               ...restOutput,
-              path: path.join(outputConfig.path, depPath),
+              path: path.join(outputConfig.path ?? '.', depPath ?? '.'),
               force: outputConfig.force ?? restOutput.force,
               dryRun: outputConfig.dryRun ?? restOutput.dryRun,
               keepExisting: outputConfig.keepExisting ?? restOutput.keepExisting,

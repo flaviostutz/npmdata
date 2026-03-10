@@ -52,7 +52,7 @@ describe('runExtract — source selection', () => {
     const { entries } = mockActionExtract.mock.calls[0][0];
     expect(entries).toHaveLength(1);
     expect(entries[0].package).toBe('cli-pkg@2.0.0');
-    expect(entries[0].output.path).toBe('./cli-out');
+    expect(entries[0].output!.path).toBe('./cli-out');
   });
 
   it('uses config sets when --packages is not provided', async () => {
@@ -91,32 +91,32 @@ describe('runExtract — CLI overrides applied to config entries', () => {
   it('overrides output path with --output', async () => {
     await runExtract(CONFIG_WITH_SETS, ['--output', './override-out'], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.path).toBe('./override-out');
+    expect(entries[0].output!.path).toBe('./override-out');
   });
 
   it('overrides force with --force', async () => {
     await runExtract(CONFIG_WITH_SETS, ['--force'], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.force).toBe(true);
+    expect(entries[0].output!.force).toBe(true);
   });
 
   it('overrides dryRun with --dry-run', async () => {
     await runExtract(CONFIG_WITH_SETS, ['--dry-run'], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.dryRun).toBe(true);
+    expect(entries[0].output!.dryRun).toBe(true);
   });
 
   it('overrides gitignore with --no-gitignore', async () => {
     // Config entry has gitignore: true — CLI flag should override to false
     await runExtract(CONFIG_WITH_SETS, ['--no-gitignore'], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.gitignore).toBe(false);
+    expect(entries[0].output!.gitignore).toBe(false);
   });
 
   it('overrides keepExisting with --keep-existing', async () => {
     await runExtract(CONFIG_WITH_SETS, ['--keep-existing'], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.keepExisting).toBe(true);
+    expect(entries[0].output!.keepExisting).toBe(true);
   });
 
   it('overrides silent with --silent', async () => {
@@ -128,9 +128,9 @@ describe('runExtract — CLI overrides applied to config entries', () => {
   it('preserves config entry values when no overriding CLI flag given', async () => {
     await runExtract(CONFIG_WITH_SETS, [], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.path).toBe('./config-out');
-    expect(entries[0].output.force).toBe(false);
-    expect(entries[0].output.gitignore).toBe(true);
+    expect(entries[0].output!.path).toBe('./config-out');
+    expect(entries[0].output!.force).toBe(false);
+    expect(entries[0].output!.gitignore).toBe(true);
   });
 
   it('applies CLI overrides to all config entries', async () => {
@@ -142,9 +142,9 @@ describe('runExtract — CLI overrides applied to config entries', () => {
     };
     await runExtract(multiConfig, ['--dry-run', '--silent'], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.dryRun).toBe(true);
+    expect(entries[0].output!.dryRun).toBe(true);
     expect(entries[0].silent).toBe(true);
-    expect(entries[1].output.dryRun).toBe(true);
+    expect(entries[1].output!.dryRun).toBe(true);
     expect(entries[1].silent).toBe(true);
   });
 });
@@ -158,9 +158,9 @@ describe('runExtract — CLI --packages does not apply applyArgvOverrides redund
       '/cwd',
     );
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output.force).toBe(true);
-    expect(entries[0].output.dryRun).toBe(true);
-    expect(entries[0].output.gitignore).toBe(false);
+    expect(entries[0].output!.force).toBe(true);
+    expect(entries[0].output!.dryRun).toBe(true);
+    expect(entries[0].output!.gitignore).toBe(false);
     expect(entries[0].silent).toBe(true);
   });
 });

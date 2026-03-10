@@ -26,6 +26,7 @@ export type PurgeSummary = {
  * Purge managed files from all matching filesets.
  * Supports --presets filtering and --dry-run.
  */
+// eslint-disable-next-line complexity
 export async function actionPurge(options: PurgeOptions): Promise<PurgeSummary> {
   const { entries, cwd, presets = [], dryRun = false, verbose = false, onProgress } = options;
 
@@ -42,10 +43,12 @@ export async function actionPurge(options: PurgeOptions): Promise<PurgeSummary> 
 
   for (const entry of filtered) {
     const pkg = parsePackageSpec(entry.package);
-    const outputDir = path.resolve(cwd, entry.output.path);
+    const outputDir = path.resolve(cwd, entry.output?.path ?? '.');
 
     if (verbose) {
-      console.log(`[verbose] purge: entry package=${entry.package} outputDir=${entry.output.path}`);
+      console.log(
+        `[verbose] purge: entry package=${entry.package} outputDir=${entry.output?.path ?? '.'}`,
+      );
     }
 
     onProgress?.({

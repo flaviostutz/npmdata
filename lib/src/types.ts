@@ -14,9 +14,13 @@ export type PackageConfig = {
 export type SelectorConfig = {
   /**
    * Glob patterns; files must match at least one.
-   * Default: DEFAULT_FILENAME_PATTERNS (excludes package.json, bin/**, README.md, node_modules/**)
+   * Default: all files except package.json, bin/**, README.md, node_modules/**
    */
   files?: string[];
+  /**
+   * Glob patterns; files matching any of these are excluded even if they match `files`.
+   */
+  exclude?: string[];
   /**
    * Regex strings; files must match at least one. Binary files always skip regex check.
    */
@@ -37,8 +41,9 @@ export type SelectorConfig = {
 export type OutputConfig = {
   /**
    * Output directory relative to cwd. Concatenated across recursion levels.
+   * Defaults to '.' (current working directory) when omitted.
    */
-  path: string;
+  path?: string;
   /**
    * Overwrite existing unmanaged files. Overridden by --force and --keep-existing.
    */
@@ -108,8 +113,8 @@ export type ContentReplacementConfig = {
 export type NpmdataExtractEntry = {
   /** Flat package spec string ("my-pkg@^1.2.3"). Parsed to PackageConfig internally. */
   package: string;
-  /** Where/how to write files. */
-  output: OutputConfig;
+  /** Where/how to write files. Defaults to current directory with no special flags. */
+  output?: OutputConfig;
   /** Which files to select and install options. */
   selector?: SelectorConfig;
   /**

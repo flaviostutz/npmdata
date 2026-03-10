@@ -33,7 +33,7 @@ export async function actionList(options: ListOptions): Promise<ManagedFileMetad
     outputDirs.push(path.resolve(cwd, output));
   } else {
     for (const entry of entries) {
-      const dir = path.resolve(cwd, entry.output.path);
+      const dir = path.resolve(cwd, entry.output?.path ?? '.');
       if (!seen.has(dir)) {
         seen.add(dir);
         if (verbose) {

@@ -184,7 +184,7 @@ Each entry in `npmdata.sets` supports:
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `package` | `string` | required | Package spec: `my-pkg` or `my-pkg@^1.2.3` |
-| `output.path` | `string` | required | Extraction directory, relative to where the command runs |
+| `output.path` | `string` | `.` (cwd) | Extraction directory, relative to where the command runs |
 | `selector.files` | `string[]` | all files | Glob patterns to filter extracted files |
 | `selector.contentRegexes` | `string[]` | none | Regex patterns to filter files by content |
 | `output.force` | `boolean` | `false` | Overwrite unmanaged or foreign-owned files |

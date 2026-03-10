@@ -26,6 +26,7 @@ export type CheckSummary = {
  * Orchestrate check across all filesets, filtering out unmanaged entries.
  * Returns a summary of all drift found across all entries.
  */
+// eslint-disable-next-line complexity
 export async function actionCheck(options: CheckOptions): Promise<CheckSummary> {
   const { entries, cwd, verbose = false, onProgress } = options;
   const summary: CheckSummary = { missing: [], modified: [], extra: [] };
@@ -39,14 +40,14 @@ export async function actionCheck(options: CheckOptions): Promise<CheckSummary> 
   for (const entry of entries) {
     // Skip unmanaged entries — they write no marker so there is nothing to check.
     // The --unmanaged flag also suppresses checking for explicitly marked entries.
-    if (entry.output.unmanaged) continue;
+    if (entry.output?.unmanaged) continue;
 
     const pkg = parsePackageSpec(entry.package);
-    const outputDir = path.resolve(cwd, entry.output.path);
+    const outputDir = path.resolve(cwd, entry.output?.path ?? '.');
 
     if (verbose) {
       console.log(
-        `[verbose] check: checking package=${entry.package} outputDir=${entry.output.path}`,
+        `[verbose] check: checking package=${entry.package} outputDir=${entry.output?.path ?? '.'}`,
       );
     }
 
@@ -73,7 +74,7 @@ export async function actionCheck(options: CheckOptions): Promise<CheckSummary> 
       pkgPath,
       outputDir,
       entry.selector ?? {},
-      entry.output,
+      entry.output ?? {},
       existingMarker,
     );
 

@@ -58,7 +58,7 @@ export async function runExtract(
   });
 
   // Run postExtractScript if configured and not dry-run
-  const isDryRun = filtered.some((e) => e.output.dryRun);
+  const isDryRun = filtered.some((e) => e.output?.dryRun);
   if (!isDryRun && config?.postExtractScript) {
     const scriptCmd = `${config.postExtractScript} ${argv.join(' ')}`.trim();
     try {

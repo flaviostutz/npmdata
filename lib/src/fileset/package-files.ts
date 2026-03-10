@@ -6,7 +6,7 @@ import { minimatch } from 'minimatch';
 import { SelectorConfig } from '../types';
 import { isBinaryFile } from '../utils';
 
-import { MARKER_FILE, DEFAULT_FILENAME_PATTERNS } from './constants';
+import { MARKER_FILE, DEFAULT_FILE_PATTERNS, DEFAULT_EXCLUDE_PATTERNS } from './constants';
 
 /**
  * Returns the installed package path from node_modules in cwd, or null if not found.
@@ -23,7 +23,8 @@ export function installedPackagePath(name: string, cwd?: string): string | null 
 
 /**
  * Enumerate all files in a package directory that match the selector.
- * Applies DEFAULT_FILENAME_PATTERNS when `files` is absent.
+ * Applies DEFAULT_FILE_PATTERNS when `files` is absent; applies DEFAULT_EXCLUDE_PATTERNS when
+ * neither `files` nor `exclude` is specified.
  * Binary files always skip contentRegexes check (but are included by glob).
  *
  * @returns Array of relative file paths from the package root.
@@ -32,7 +33,8 @@ export async function enumeratePackageFiles(
   pkgPath: string,
   selector: SelectorConfig,
 ): Promise<string[]> {
-  const filePatterns = selector.files ?? DEFAULT_FILENAME_PATTERNS;
+  const filePatterns = selector.files ?? DEFAULT_FILE_PATTERNS;
+  const excludePatterns = selector.exclude ?? (selector.files ? [] : DEFAULT_EXCLUDE_PATTERNS);
   const contentRegexes = (selector.contentRegexes ?? []).map((r) => new RegExp(r));
   const results: string[] = [];
 
@@ -54,6 +56,9 @@ export async function enumeratePackageFiles(
 
       // Apply glob filter
       if (!matchesFilePatterns(relPath, filePatterns)) continue;
+
+      // Apply exclude patterns
+      if (excludePatterns.some((pat) => minimatch(relPath, pat, { dot: true }))) continue;
 
       // Apply content regex filter (skip for binary files)
       if (contentRegexes.length > 0 && !isBinaryFile(fullPath)) {

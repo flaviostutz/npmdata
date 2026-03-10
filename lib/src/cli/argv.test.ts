@@ -88,13 +88,13 @@ describe('buildEntriesFromArgv', () => {
     const entries = buildEntriesFromArgv(parsed);
     expect(entries).toHaveLength(1);
     expect(entries![0].package).toBe('my-pkg@1.0.0');
-    expect(entries![0].output.path).toBe('./out');
+    expect(entries![0].output!.path).toBe('./out');
   });
 
   it('defaults output path to "." when --output missing', () => {
     const parsed = parseArgv(['--packages', 'my-pkg']);
     const entries = buildEntriesFromArgv(parsed);
-    expect(entries![0].output.path).toBe('.');
+    expect(entries![0].output!.path).toBe('.');
   });
 });
 
@@ -131,43 +131,43 @@ describe('applyArgvOverrides', () => {
   it('overrides output path when --output is set', () => {
     const parsed = parseArgv(['--output', './new-path', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output.path).toBe('./new-path');
+    expect(result[0].output!.path).toBe('./new-path');
   });
 
   it('does not override output path when --output is not set', () => {
     const parsed = parseArgv(['--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output.path).toBe('./current');
+    expect(result[0].output!.path).toBe('./current');
   });
 
   it('applies --force override', () => {
     const parsed = parseArgv(['--force', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output.force).toBe(true);
+    expect(result[0].output!.force).toBe(true);
   });
 
   it('applies --keep-existing override', () => {
     const parsed = parseArgv(['--keep-existing', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output.keepExisting).toBe(true);
+    expect(result[0].output!.keepExisting).toBe(true);
   });
 
   it('applies --no-gitignore override', () => {
     const parsed = parseArgv(['--no-gitignore', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output.gitignore).toBe(false);
+    expect(result[0].output!.gitignore).toBe(false);
   });
 
   it('applies --unmanaged override', () => {
     const parsed = parseArgv(['--unmanaged', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output.unmanaged).toBe(true);
+    expect(result[0].output!.unmanaged).toBe(true);
   });
 
   it('applies --dry-run override', () => {
     const parsed = parseArgv(['--dry-run', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output.dryRun).toBe(true);
+    expect(result[0].output!.dryRun).toBe(true);
   });
 
   it('applies --files override to selector', () => {

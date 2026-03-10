@@ -89,4 +89,32 @@ describe('enumeratePackageFiles', () => {
     // Binary files pass through (cannot be scanned but may be legitimately needed)
     expect(files).toContain('data/binary.bin');
   });
+
+  it('applies exclude patterns to omit matched files', async () => {
+    const files = await enumeratePackageFiles(pkgPath, {
+      files: ['**/*.md'],
+      exclude: ['docs/**'],
+    });
+    expect(files).toContain('README.md');
+    expect(files).not.toContain('docs/guide.md');
+    expect(files).not.toContain('docs/api.md');
+  });
+
+  it('excludes nothing when exclude is empty', async () => {
+    const files = await enumeratePackageFiles(pkgPath, {
+      files: ['**/*.md'],
+      exclude: [],
+    });
+    expect(files).toContain('docs/guide.md');
+    expect(files).toContain('docs/api.md');
+    expect(files).toContain('README.md');
+  });
+
+  it('exclude takes precedence over files match', async () => {
+    const files = await enumeratePackageFiles(pkgPath, {
+      files: ['**/*.md'],
+      exclude: ['**/*.md'],
+    });
+    expect(files).toHaveLength(0);
+  });
 });

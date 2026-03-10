@@ -262,6 +262,27 @@ describe('actionExtract', () => {
     expect(fs.existsSync(linkPath) || fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
   }, 90000);
 
+  it('throws when entry is missing package field', async () => {
+    await expect(
+      actionExtract({
+        entries: [{ package: '', output: { path: 'out' } }],
+        config: null,
+        cwd: tmpDir,
+      }),
+    ).rejects.toThrow('"package" field');
+  });
+
+  it('defaults output.path to cwd when omitted', async () => {
+    await installMockPackage('default-out-pkg', '1.0.0', { 'file.md': '# hi' }, tmpDir);
+    const result = await actionExtract({
+      entries: [{ package: 'default-out-pkg' }],
+      config: null,
+      cwd: tmpDir,
+    });
+    expect(result.added).toBe(1);
+    expect(fs.existsSync(path.join(tmpDir, 'file.md'))).toBe(true);
+  }, 60_000);
+
   it('returns zero counts for empty entries', async () => {
     const result = await actionExtract({
       entries: [],

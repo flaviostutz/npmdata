@@ -255,8 +255,9 @@ Each entry in the `npmdata.sets` array in `package.json` supports the following 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `package` | `string` | required | Package spec to install and extract. Either a bare name (`my-pkg`) or with a semver constraint (`my-pkg@^1.2.3`). |
-| `output.path` | `string` | required | Directory where files will be extracted, relative to where the consumer runs the command. |
+| `output.path` | `string` | `.` (cwd) | Directory where files will be extracted, relative to where the consumer runs the command. |
 | `selector.files` | `string[]` | all files | Glob patterns to filter which files are extracted (e.g. `["data/**", "*.json"]`). |
+| `selector.exclude` | `string[]` | `["package.json","bin/**","README.md","node_modules/**"]` (when `files` is unset), none otherwise | Glob patterns to exclude files even when they match `selector.files` (e.g. `["test/**", "**/*.test.*"]`). |
 | `selector.contentRegexes` | `string[]` | none | Regex patterns (as strings) to filter files by content. Only files matching at least one pattern are extracted. |
 | `output.force` | `boolean` | `false` | Allow overwriting existing unmanaged files or files owned by a different package. |
 | `output.keepExisting` | `boolean` | `false` | Skip files that already exist but create them when absent. Cannot be combined with `force`. |
