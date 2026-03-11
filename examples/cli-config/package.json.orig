@@ -65,9 +65,6 @@
       {
         "package": "example-files-package",
         "selector": {
-          "files": [
-            "conf/globals.js"
-          ],
           "presets": [
             "eslint"
           ]

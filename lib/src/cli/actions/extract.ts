@@ -40,7 +40,9 @@ export async function runExtract(
   const filtered = filterEntriesByPresets(entries, presets);
 
   if (filtered.length === 0) {
-    console.log('No entries matched the specified presets.');
+    console.log(
+      `Presets (${presets.join(', ')}) not found in packages (${entries.map((e) => e.package).join(', ')})`,
+    );
     return;
   }
 

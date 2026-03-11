@@ -77,7 +77,7 @@ test:
 	# --- Test 5: selector presets - only extract eslint-related nested sets ---
 	rm -rf output
 	pnpm exec npmdata extract --presets "nested-eslint"
-	# nested eslint set (selector.presets=["eslint"]) should have extracted conf/globals.js
+	# nested eslint set (selector.presets=["eslint"]) should have extracted conf/globals.js only
 	test -e output/nested-eslint/conf/globals.js
 	# docs and data should not be extracted (only 'nested-eslint' top-level set ran)
 	test ! -e output/docs/README.md

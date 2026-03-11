@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { loadNpmdataConfig } from '../package/config';
 
 import { printUsage, printVersion } from './usage';
@@ -59,7 +60,6 @@ export async function cli(argv: string[], cwd?: string, configCwd?: string): Pro
     await dispatch(action, config, cmdArgs, effectiveCwd);
     return 0;
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error((error as Error).message);
     return 1;
   }
@@ -96,14 +96,13 @@ async function dispatch(
 }
 
 export function setupUncaughtExceptionHandler(): void {
-  process.on('uncaughtException', (err) => {
-    const errs = `${err}`;
-    let i = errs.indexOf('\n');
-    if (i === -1) i = errs.length;
-    if (process.argv.includes('--verbose')) {
-      // eslint-disable-next-line no-console
+  if (!process.argv.includes('--verbose')) {
+    process.on('uncaughtException', (err) => {
+      const errs = `${err}`;
+      let i = errs.indexOf('\n');
+      if (i === -1) i = errs.length;
       console.log(errs.slice(0, Math.max(0, i)));
-    }
-    process.exit(3);
-  });
+      process.exit(3);
+    });
+  }
 }

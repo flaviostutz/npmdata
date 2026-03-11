@@ -113,9 +113,7 @@ async function runPackageManagerCommand(
   try {
     execSync(cmd, { cwd: workDir, stdio: 'pipe', encoding: 'utf8' });
   } catch (error: unknown) {
-    const e = error as { stderr?: string; stdout?: string; message?: string };
-    const detail = (e.stderr ?? e.stdout ?? e.message ?? String(error)).trim();
-    throw new Error(`Failed to install ${spec}: ${detail}`);
+    throw new Error(`Failed to run ${spec}: ${error}`);
   }
 }
 
@@ -132,7 +130,7 @@ export async function installOrUpgradePackage(
   verbose?: boolean,
 ): Promise<string> {
   const workDir = cwd ?? process.cwd();
-  const spec = version ? `${name}@${version}` : `${name}@latest`;
+  const spec = version ? `${name}@${version}` : `${name}`;
 
   // Check if already installed with a satisfying version (skip install if not upgrading)
   if (!upgrade) {

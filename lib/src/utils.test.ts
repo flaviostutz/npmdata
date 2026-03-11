@@ -302,7 +302,7 @@ describe('installPackage', () => {
     // Attempt to install a definitely-nonexistent package so execSync fails
     await expect(
       installOrUpgradePackage('__nonexistent_pkg_xyz_abc__', '0.0.1', true, tmpDir),
-    ).rejects.toThrow(/Failed to install/);
+    ).rejects.toThrow(/Failed to run/);
   });
 
   it('throws a clear error when install succeeds but package not found in node_modules', async () => {
@@ -479,7 +479,7 @@ describe('installPackage', () => {
       });
       try {
         await expect(installOrUpgradePackage('some-pkg', '1.0.0', true, tmpDir)).rejects.toThrow(
-          /failed to install.*self-install network error/i,
+          /failed to run.*self-install network error/i,
         );
       } finally {
         spy.mockRestore();
