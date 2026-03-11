@@ -95,19 +95,30 @@ describe('enumeratePackageFiles', () => {
       files: ['**/*.md'],
       exclude: ['docs/**'],
     });
-    expect(files).toContain('README.md');
+    // README.md is excluded by DEFAULT_EXCLUDE_PATTERNS; docs/** by the custom exclude
+    expect(files).not.toContain('README.md');
     expect(files).not.toContain('docs/guide.md');
     expect(files).not.toContain('docs/api.md');
   });
 
-  it('excludes nothing when exclude is empty', async () => {
+  it('still applies default exclusions when exclude is empty', async () => {
     const files = await enumeratePackageFiles(pkgPath, {
       files: ['**/*.md'],
       exclude: [],
     });
     expect(files).toContain('docs/guide.md');
     expect(files).toContain('docs/api.md');
+    // README.md is excluded by DEFAULT_EXCLUDE_PATTERNS even though exclude: []
+    expect(files).not.toContain('README.md');
+  });
+
+  it('removes a default exclusion when its pattern is listed exactly in files', async () => {
+    // README.md is in DEFAULT_EXCLUDE_PATTERNS; listing it explicitly in files should un-exclude it
+    const files = await enumeratePackageFiles(pkgPath, {
+      files: ['README.md', '**/*.md'],
+    });
     expect(files).toContain('README.md');
+    expect(files).toContain('docs/guide.md');
   });
 
   it('exclude takes precedence over files match', async () => {

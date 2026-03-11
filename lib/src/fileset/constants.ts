@@ -9,11 +9,17 @@ export const MARKER_FILE = '.npmdata';
 export const DEFAULT_FILE_PATTERNS = ['**'];
 
 /**
- * Default exclusion glob patterns applied when no `exclude` is specified in SelectorConfig
- * and the user has not provided custom `files`.
+ * Default exclusion glob patterns always applied, regardless of whether a custom `exclude` is
+ * specified in SelectorConfig. Custom `exclude` patterns are appended to these.
  * Excludes common package metadata files that are not meant to be extracted by consumers.
  */
-export const DEFAULT_EXCLUDE_PATTERNS = ['package.json', 'bin/**', 'README.md', 'node_modules/**'];
+export const DEFAULT_EXCLUDE_PATTERNS = [
+  'package.json',
+  'bin/**',
+  'README.md',
+  'node_modules/**',
+  'LICENSE*',
+];
 
 export const GITIGNORE_FILE = '.gitignore';
 export const GITIGNORE_START = '# npmdata:start';

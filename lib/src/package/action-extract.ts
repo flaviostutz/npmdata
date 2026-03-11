@@ -216,6 +216,12 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
         // requested by the consumer. When selector.presets is empty, all sets pass through.
         const presetFilteredSets = filterEntriesByPresets(pkgNpmdataSets, selector.presets ?? []);
 
+        if ((selector.presets ?? []).length > 0 && presetFilteredSets.length === 0) {
+          throw new Error(
+            `Preset selector [${(selector.presets ?? []).join(', ')}] did not match any sets in package "${pkg.name}". Available presets: [${[...new Set(pkgNpmdataSets.flatMap((s) => s.presets ?? []))].sort().join(', ')}]`,
+          );
+        }
+
         const filteredSets = presetFilteredSets.filter(
           (e) =>
             !siblingNames.has(parsePackageSpec(e.package).name) &&

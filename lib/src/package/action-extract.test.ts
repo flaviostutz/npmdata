@@ -284,6 +284,36 @@ describe('actionExtract', () => {
     expect(fs.existsSync(path.join(outputDir, 'nested', 'data', 'sample.csv'))).toBe(false);
   }, 90000);
 
+  it('throws when selector.presets does not match any set in the producer package', async () => {
+    await installMockPackage('no-match-pkg', '1.0.0', { 'main.md': '# Main' }, tmpDir);
+    const mainPkgJsonPath = path.join(tmpDir, 'node_modules', 'no-match-pkg', 'package.json');
+    const existing = JSON.parse(fs.readFileSync(mainPkgJsonPath).toString()) as object;
+    fs.writeFileSync(
+      mainPkgJsonPath,
+      JSON.stringify({
+        ...existing,
+        npmdata: {
+          sets: [{ package: 'some-dep', presets: ['docs'], output: { path: '.' } }],
+        },
+      }),
+    );
+
+    const outputDir = path.join(tmpDir, 'output');
+    await expect(
+      actionExtract({
+        entries: [
+          {
+            package: 'no-match-pkg',
+            selector: { presets: ['nonexistent'] },
+            output: { path: outputDir, gitignore: false },
+          },
+        ],
+        config: null,
+        cwd: tmpDir,
+      }),
+    ).rejects.toThrow('nonexistent');
+  }, 60000);
+
   it('emits file-modified event on re-extraction with changed content', async () => {
     // First extraction
     await installMockPackage('modify-pkg', '1.0.0', { 'doc.md': '# v1' }, tmpDir);

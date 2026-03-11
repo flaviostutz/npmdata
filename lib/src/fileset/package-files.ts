@@ -23,8 +23,9 @@ export function installedPackagePath(name: string, cwd?: string): string | null 
 
 /**
  * Enumerate all files in a package directory that match the selector.
- * Applies DEFAULT_FILE_PATTERNS when `files` is absent; applies DEFAULT_EXCLUDE_PATTERNS when
- * neither `files` nor `exclude` is specified.
+ * Applies DEFAULT_FILE_PATTERNS when `files` is absent; always applies DEFAULT_EXCLUDE_PATTERNS,
+ * appending any custom `exclude` patterns on top. Any default exclusion pattern that appears
+ * exactly as an entry in `files` is removed so the file can be explicitly included.
  * Binary files always skip contentRegexes check (but are included by glob).
  *
  * @returns Array of relative file paths from the package root.
@@ -34,7 +35,8 @@ export async function enumeratePackageFiles(
   selector: SelectorConfig,
 ): Promise<string[]> {
   const filePatterns = selector.files ?? DEFAULT_FILE_PATTERNS;
-  const excludePatterns = selector.exclude ?? (selector.files ? [] : DEFAULT_EXCLUDE_PATTERNS);
+  const activeDefaultExcludes = DEFAULT_EXCLUDE_PATTERNS.filter((p) => !filePatterns.includes(p));
+  const excludePatterns = [...activeDefaultExcludes, ...(selector.exclude ?? [])];
   const contentRegexes = (selector.contentRegexes ?? []).map((r) => new RegExp(r));
   const results: string[] = [];
 
