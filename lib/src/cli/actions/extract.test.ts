@@ -372,7 +372,7 @@ describe('runExtract — postExtractScript', () => {
       output: [],
       stdout: Buffer.from(''),
       stderr: Buffer.from(''),
-      status: 1,
+      status: 0,
       signal: null,
       // eslint-disable-next-line no-undefined
       error: undefined,

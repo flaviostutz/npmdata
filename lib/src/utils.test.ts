@@ -319,6 +319,25 @@ describe('installPackage', () => {
     }
   });
 
+  it('throws when spawnSync exits with non-zero status but no error object (e.g. pnpm workspace conflict)', async () => {
+    // This is the real-world case: pnpm exits with code 1 but no system-level error.
+    const spy = jest.spyOn(childProcess, 'spawnSync').mockReturnValue({
+      pid: 0,
+      output: [],
+      stdout: '',
+      stderr: 'ERR_PNPM_ADDING_TO_ROOT',
+      status: 1,
+      signal: null,
+    });
+    try {
+      await expect(
+        installOrUpgradePackage('__nonexistent_pkg_xyz_abc__', '0.0.1', true, tmpDir),
+      ).rejects.toThrow(/exit code 1/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('throws a clear error when install succeeds but package not found in node_modules', async () => {
     // Simulate a scenario where spawnSync ran fine but no node_modules/<pkg> was created.
     // We spy on spawnSync to be a no-op for all calls (self-install + main install).

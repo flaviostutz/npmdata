@@ -169,12 +169,19 @@ export async function installOrUpgradePackage(
     await runPackageManagerCommand(spec, 'upgrade', workDir);
   }
 
-  const pkgPath = path.join(workDir, 'node_modules', name);
+  let pkgPath = path.join(workDir, 'node_modules', name);
   if (!fs.existsSync(pkgPath)) {
-    throw new Error(
-      `Package "${name}" was not found at "${pkgPath}" after installation. ` +
-        `Ensure you are running from a directory that has a package.json file.`,
-    );
+    // Fall back to Node.js module resolution, which handles pnpm workspaces where the
+    // package may be installed in the workspace root's node_modules rather than locally.
+    try {
+      const resolved = require.resolve(`${name}/package.json`, { paths: [workDir] });
+      pkgPath = path.dirname(resolved);
+    } catch {
+      throw new Error(
+        `Package "${name}" was not found at "${path.join(workDir, 'node_modules', name)}" after installation. ` +
+          `Ensure you are running from a directory that has a package.json file.`,
+      );
+    }
   }
   return pkgPath;
 }
@@ -321,6 +328,14 @@ export function spawnWithLog(
     if (failOnError) {
       throw result.error;
     }
+  }
+
+  if (result.status !== 0 && failOnError) {
+    const stderr = result.stderr?.toString().trim() ?? '';
+    throw new Error(
+      `Command "${command} ${args.join(' ')}" failed with exit code ${result.status}` +
+        (stderr ? `:\n${stderr}` : ''),
+    );
   }
 
   return result;
