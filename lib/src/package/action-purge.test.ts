@@ -149,6 +149,125 @@ describe('actionPurge', () => {
     expect(fileDeleted).toBeDefined();
   });
 
+  it('verbose mode logs without errors', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'verbose.md'), 'content');
+
+    await writeMarker(markerPath(outputDir), [
+      { path: 'verbose.md', packageName: 'verbose-pkg', packageVersion: '1.0.0' },
+    ]);
+
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'verbose-pkg@1.0.0', output: { path: outputDir } },
+    ];
+    const result = await actionPurge({ entries, config: null, cwd: tmpDir, verbose: true });
+
+    expect(result.deleted).toBe(1);
+  });
+
+  it('verbose dry-run logs phase messages', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'file.md'), 'content');
+
+    await writeMarker(markerPath(outputDir), [
+      { path: 'file.md', packageName: 'vdry-pkg', packageVersion: '1.0.0' },
+    ]);
+
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'vdry-pkg@1.0.0', output: { path: outputDir } },
+    ];
+    const result = await actionPurge({
+      entries,
+      config: null,
+      cwd: tmpDir,
+      verbose: true,
+      dryRun: true,
+    });
+
+    expect(result.deleted).toBe(1);
+    expect(fs.existsSync(path.join(outputDir, 'file.md'))).toBe(true);
+  });
+
+  it('skips hierarchy when transitive package is not installed', async () => {
+    // Parent is installed but the child it references is not installed
+    const parentPkgDir = path.join(tmpDir, 'node_modules', 'parent-uninstalled-child');
+    fs.mkdirSync(parentPkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(parentPkgDir, 'package.json'),
+      JSON.stringify({
+        name: 'parent-uninstalled-child',
+        version: '1.0.0',
+        npmdata: {
+          sets: [{ package: 'nonexistent-child@1.0.0', output: { path: 'child-out' } }],
+        },
+      }),
+    );
+
+    const parentOutputDir = path.join(tmpDir, 'parent-out');
+    fs.mkdirSync(parentOutputDir, { recursive: true });
+    fs.writeFileSync(path.join(parentOutputDir, 'parent.md'), 'parent');
+
+    await writeMarker(markerPath(parentOutputDir), [
+      { path: 'parent.md', packageName: 'parent-uninstalled-child', packageVersion: '1.0.0' },
+    ]);
+
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'parent-uninstalled-child@1.0.0', output: { path: parentOutputDir } },
+    ];
+    // Should not throw and should purge the parent file
+    const result = await actionPurge({ entries, config: null, cwd: tmpDir });
+
+    expect(result.deleted).toBe(1);
+    expect(fs.existsSync(path.join(parentOutputDir, 'parent.md'))).toBe(false);
+  });
+
+  it('hierarchically purges transitive packages declared in npmdata.sets with verbose', async () => {
+    // Same as the non-verbose hierarchical test but with verbose: true to cover the
+    // "recursing into" verbose log branch (line ~122 in action-purge.ts).
+    const parentPkgDir = path.join(tmpDir, 'node_modules', 'vp-parent');
+    fs.mkdirSync(parentPkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(parentPkgDir, 'package.json'),
+      JSON.stringify({
+        name: 'vp-parent',
+        version: '1.0.0',
+        npmdata: { sets: [{ package: 'vp-child@1.0.0', output: { path: 'child-out' } }] },
+      }),
+    );
+
+    const childPkgDir = path.join(tmpDir, 'node_modules', 'vp-child');
+    fs.mkdirSync(childPkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(childPkgDir, 'package.json'),
+      JSON.stringify({ name: 'vp-child', version: '1.0.0' }),
+    );
+
+    const parentOutputDir = path.join(tmpDir, 'vp-parent-out');
+    fs.mkdirSync(parentOutputDir, { recursive: true });
+    fs.writeFileSync(path.join(parentOutputDir, 'parent.md'), 'parent content');
+    await writeMarker(markerPath(parentOutputDir), [
+      { path: 'parent.md', packageName: 'vp-parent', packageVersion: '1.0.0' },
+    ]);
+
+    const childOutputDir = path.join(tmpDir, 'vp-parent-out', 'child-out');
+    fs.mkdirSync(childOutputDir, { recursive: true });
+    fs.writeFileSync(path.join(childOutputDir, 'child.md'), 'child content');
+    await writeMarker(markerPath(childOutputDir), [
+      { path: 'child.md', packageName: 'vp-child', packageVersion: '1.0.0' },
+    ]);
+
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'vp-parent@1.0.0', output: { path: parentOutputDir } },
+    ];
+    const result = await actionPurge({ entries, config: null, cwd: tmpDir, verbose: true });
+
+    expect(result.deleted).toBe(2);
+    expect(fs.existsSync(path.join(parentOutputDir, 'parent.md'))).toBe(false);
+    expect(fs.existsSync(path.join(childOutputDir, 'child.md'))).toBe(false);
+  });
+
   it('hierarchically purges transitive packages declared in npmdata.sets', async () => {
     // Simulate a parent package (pkg-parent) installed in node_modules whose
     // package.json declares npmdata.sets pointing at a child package (pkg-child).

@@ -10,10 +10,7 @@ build: install
 # 	pnpm exec example-files-package
 # 	pnpm exec example-files-package extract --files "docs/**/*,conf/**/*" --output output
 
-test:
-	# install the data package and extract the data
-	make clean
-	make install
+test: clean install
 	pnpm exec example-files-package extract --output output
 
 	# fail if a expected extracted file doesn't exist

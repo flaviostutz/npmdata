@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { jest } from '@jest/globals';
+
 import { installMockPackage } from '../fileset/test-utils';
 import { NpmdataExtractEntry } from '../types';
 import { writeMarker, markerPath } from '../fileset/markers';
@@ -302,5 +304,147 @@ describe('actionCheck', () => {
     expect(result.missing).not.toContain('parent.md');
     // Child file is missing — recursive check must detect it
     expect(result.missing).toContain('child.md');
+  }, 60000);
+
+  it('verbose mode logs without errors', async () => {
+    await installMockPackage('verbose-check-pkg', '1.0.0', { 'readme.md': '# hello' }, tmpDir);
+    const outputDir = path.join(tmpDir, 'out-verbose');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'readme.md'), '# hello');
+
+    const markerFile = markerPath(outputDir);
+    await writeMarker(markerFile, [
+      { path: 'readme.md', packageName: 'verbose-check-pkg', packageVersion: '1.0.0' },
+    ]);
+
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'verbose-check-pkg@1.0.0', output: { path: outputDir } },
+    ];
+
+    const result = await actionCheck({ entries, cwd: tmpDir, verbose: true });
+    expect(result.missing).toHaveLength(0);
+    expect(result.modified).toHaveLength(0);
+  }, 60000);
+
+  it('verbose mode logs when package not installed', async () => {
+    const outputDir = path.join(tmpDir, 'out-vnp');
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    await writeMarker(markerPath(outputDir), [
+      { path: 'file.md', packageName: 'missing-verbose-pkg', packageVersion: '1.0.0' },
+    ]);
+
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'missing-verbose-pkg@1.0.0', output: { path: outputDir } },
+    ];
+
+    const result = await actionCheck({ entries, cwd: tmpDir, verbose: true });
+    expect(result.missing).toHaveLength(1);
+  }, 30000);
+
+  it('handles error reading transitive package.json gracefully with verbose', async () => {
+    // Install a valid package so getInstalledIfSatisfies can parse the version.
+    // Then spy on fs.readFileSync to throw on the second read of that package.json
+    // (the one done inside the try/catch in actionCheck that looks for npmdata.sets),
+    // covering the catch + verbose warn branches.
+    await installMockPackage('spy-corrupt-parent', '1.0.0', { 'readme.md': '# hi' }, tmpDir);
+
+    const pkgJsonPath = path.join(tmpDir, 'node_modules', 'spy-corrupt-parent', 'package.json');
+
+    const outputDir = path.join(tmpDir, 'out-spy-corrupt');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'readme.md'), '# hi');
+
+    await writeMarker(markerPath(outputDir), [
+      { path: 'readme.md', packageName: 'spy-corrupt-parent', packageVersion: '1.0.0' },
+    ]);
+
+    const origReadFileSync = fs.readFileSync;
+    let pkgJsonCallCount = 0;
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((...args: any[]): any => {
+      const filePath = args[0];
+      if (typeof filePath === 'string' && filePath === pkgJsonPath) {
+        pkgJsonCallCount += 1;
+        if (pkgJsonCallCount >= 2) {
+          throw new SyntaxError('Simulated corrupt JSON');
+        }
+      }
+
+      return (origReadFileSync as any)(...args);
+    });
+
+    try {
+      const entries: NpmdataExtractEntry[] = [
+        { package: 'spy-corrupt-parent@1.0.0', output: { path: outputDir } },
+      ];
+      // Should not throw — catch block inside actionCheck handles the error
+      const result = await actionCheck({ entries, cwd: tmpDir, verbose: true });
+      expect(result).toBeDefined();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 60000);
+
+  it('skips unmanaged entries (output.unmanaged=true)', async () => {
+    // Without any package installed or marker, check should return empty for unmanaged
+    const entries: NpmdataExtractEntry[] = [
+      {
+        package: 'unmanaged-check-pkg',
+        output: { path: path.join(tmpDir, 'out'), unmanaged: true },
+      },
+    ];
+
+    const result = await actionCheck({ entries, cwd: tmpDir });
+    expect(result.missing).toHaveLength(0);
+    expect(result.modified).toHaveLength(0);
+    expect(result.extra).toHaveLength(0);
+  }, 10000);
+
+  it('verbose mode logs recursion into transitive packages', async () => {
+    // Set up the same hierarchical structure as the recursive check test,
+    // but call with verbose: true to exercise the "recursing into" log branch.
+    const parentPkgDir = path.join(tmpDir, 'node_modules', 'verbose-recurse-parent');
+    fs.mkdirSync(parentPkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(parentPkgDir, 'package.json'),
+      JSON.stringify({
+        name: 'verbose-recurse-parent',
+        version: '1.0.0',
+        npmdata: {
+          sets: [{ package: 'verbose-recurse-child@1.0.0', output: { path: 'child-out' } }],
+        },
+      }),
+    );
+
+    const childPkgDir = path.join(tmpDir, 'node_modules', 'verbose-recurse-child');
+    fs.mkdirSync(childPkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(childPkgDir, 'package.json'),
+      JSON.stringify({ name: 'verbose-recurse-child', version: '1.0.0' }),
+    );
+    fs.writeFileSync(path.join(childPkgDir, 'child.md'), 'child content');
+
+    const parentOutputDir = path.join(tmpDir, 'verbose-parent-out');
+    fs.mkdirSync(parentOutputDir, { recursive: true });
+    fs.writeFileSync(path.join(parentOutputDir, 'parent.md'), 'parent content');
+    await writeMarker(markerPath(parentOutputDir), [
+      { path: 'parent.md', packageName: 'verbose-recurse-parent', packageVersion: '1.0.0' },
+    ]);
+
+    const childOutputDir = path.join(tmpDir, 'verbose-parent-out', 'child-out');
+    fs.mkdirSync(childOutputDir, { recursive: true });
+    fs.writeFileSync(path.join(childOutputDir, 'child.md'), 'child content');
+    await writeMarker(markerPath(childOutputDir), [
+      { path: 'child.md', packageName: 'verbose-recurse-child', packageVersion: '1.0.0' },
+    ]);
+
+    const entries: NpmdataExtractEntry[] = [
+      { package: 'verbose-recurse-parent@1.0.0', output: { path: parentOutputDir } },
+    ];
+
+    const result = await actionCheck({ entries, cwd: tmpDir, verbose: true });
+    // Both files are present and match — no drift
+    expect(result.missing).not.toContain('parent.md');
+    expect(result.missing).not.toContain('child.md');
   }, 60000);
 });

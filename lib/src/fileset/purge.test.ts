@@ -107,8 +107,16 @@ describe('purgeFileset', () => {
     fs.writeFileSync(path.join(outputDir, 'pkgA.md'), 'a');
     fs.writeFileSync(path.join(outputDir, 'pkgB.md'), 'b');
 
-    const entryA: ManagedFileMetadata = { path: 'pkgA.md', packageName: 'pkgA', packageVersion: '1.0.0' };
-    const entryB: ManagedFileMetadata = { path: 'pkgB.md', packageName: 'pkgB', packageVersion: '1.0.0' };
+    const entryA: ManagedFileMetadata = {
+      path: 'pkgA.md',
+      packageName: 'pkgA',
+      packageVersion: '1.0.0',
+    };
+    const entryB: ManagedFileMetadata = {
+      path: 'pkgB.md',
+      packageName: 'pkgB',
+      packageVersion: '1.0.0',
+    };
 
     const mPath = markerPath(outputDir);
     await writeMarker(mPath, [entryA, entryB]);

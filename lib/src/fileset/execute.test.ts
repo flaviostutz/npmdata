@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { ExtractionMap, ManagedFileMetadata } from '../types';
 
-import { execute, rollback } from './execute';
+import { execute, rollback, deleteFiles } from './execute';
 import { readMarker } from './markers';
 import { MARKER_FILE, GITIGNORE_FILE } from './constants';
 
@@ -218,6 +218,64 @@ describe('execute', () => {
     expect(names).toContain('other.md');
     expect(names).toContain('new.md');
   });
+
+  it('verbose mode logs add, modify, marker and gitignore steps', async () => {
+    const srcPath = writeFile(pkgDir, 'verbose-add.md', '# Add');
+    const destPath = path.join(outputDir, 'verbose-add.md');
+    const modSrcPath = writeFile(pkgDir, 'verbose-mod.md', '# Modified');
+    const modDestPath = path.join(outputDir, 'verbose-mod.md');
+    // Pre-create modifiable destination
+    fs.writeFileSync(modDestPath, '# Old');
+    fs.chmodSync(modDestPath, 0o644);
+
+    const map = makeMap({
+      toAdd: [{ relPath: 'verbose-add.md', sourcePath: srcPath, destPath, hash: 'abc' }],
+      toModify: [
+        { relPath: 'verbose-mod.md', sourcePath: modSrcPath, destPath: modDestPath, hash: 'xyz' },
+      ],
+    });
+
+    // Execute with verbose=true and gitignore=true to exercise all verbose branches
+    await execute(
+      map,
+      outputDir,
+      { path: '.', gitignore: true },
+      { name: 'my-pkg' },
+      '1.0.0',
+      [],
+      tmpDir,
+      true, // verbose
+    );
+
+    expect(fs.existsSync(destPath)).toBe(true);
+    expect(fs.readFileSync(modDestPath, 'utf8')).toBe('# Modified');
+  });
+
+  it('verbose mode logs content replacement step', async () => {
+    const srcPath = writeFile(pkgDir, 'replace-me.md', 'Hello TOKEN world');
+    const destPath = path.join(outputDir, 'replace-me.md');
+
+    const map = makeMap({
+      toAdd: [{ relPath: 'replace-me.md', sourcePath: srcPath, destPath, hash: 'abc' }],
+    });
+
+    await execute(
+      map,
+      outputDir,
+      {
+        path: '.',
+        gitignore: false,
+        contentReplacements: [{ files: '**', match: 'TOKEN', replace: 'DONE' }],
+      },
+      { name: 'my-pkg' },
+      '1.0.0',
+      [],
+      tmpDir,
+      true, // verbose
+    );
+
+    expect(fs.readFileSync(destPath, 'utf8')).toContain('DONE');
+  });
 });
 
 describe('rollback', () => {
@@ -240,5 +298,28 @@ describe('rollback', () => {
 
   it('ignores files that do not exist', async () => {
     await expect(rollback([path.join(tmpDir, 'nonexistent.md')])).resolves.toBeUndefined();
+  });
+});
+
+describe('deleteFiles', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'v2-deletefiles-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('deletes existing files verbosely', async () => {
+    const file = path.join(tmpDir, 'to-delete.md');
+    fs.writeFileSync(file, 'content');
+    await deleteFiles([file], true);
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  it('skips non-existent files without error', async () => {
+    await expect(deleteFiles([path.join(tmpDir, 'ghost.md')], true)).resolves.toBeUndefined();
   });
 });

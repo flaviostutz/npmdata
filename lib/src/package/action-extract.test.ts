@@ -1063,4 +1063,130 @@ describe('actionExtract', () => {
     expect(fs.existsSync(path.join(outputDir, 'docs/guide.md'))).toBe(true);
     expect(fs.existsSync(path.join(outputDir, 'LICENSE'))).toBe(false);
   }, 60000);
+
+  it('verbose mode logs extract steps without errors', async () => {
+    await installMockPackage('verbose-extract-pkg', '1.0.0', { 'guide.md': '# Guide' }, tmpDir);
+    const outputDir = path.join(tmpDir, 'output-verbose');
+
+    const result = await actionExtract({
+      entries: [{ package: 'verbose-extract-pkg', output: { path: outputDir, gitignore: false } }],
+      cwd: tmpDir,
+      verbose: true,
+    });
+
+    expect(result.added).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(outputDir, 'guide.md'))).toBe(true);
+  }, 60000);
+
+  it('verbose mode logs re-extraction (skip/modify) and deferred deletes', async () => {
+    await installMockPackage(
+      'verbose-reextract-pkg',
+      '1.0.0',
+      { 'keep.md': '# Keep', 'del.md': '# Delete' },
+      tmpDir,
+    );
+    const outputDir = path.join(tmpDir, 'output-verbose-re');
+
+    // First extraction with verbose
+    await actionExtract({
+      entries: [
+        { package: 'verbose-reextract-pkg', output: { path: outputDir, gitignore: false } },
+      ],
+      cwd: tmpDir,
+      verbose: true,
+    });
+
+    // Remove 'del.md' from the package to trigger a deferred delete on re-extract
+    const pkgDir = path.join(tmpDir, 'node_modules', 'verbose-reextract-pkg');
+    const delFile = path.join(pkgDir, 'del.md');
+    fs.chmodSync(delFile, 0o644);
+    fs.rmSync(delFile);
+
+    // Modify 'keep.md' to trigger a modify
+    const keepFile = path.join(pkgDir, 'keep.md');
+    fs.chmodSync(keepFile, 0o644);
+    fs.writeFileSync(keepFile, '# Keep v2');
+
+    const events: string[] = [];
+    const result = await actionExtract({
+      entries: [
+        {
+          package: 'verbose-reextract-pkg',
+          output: { path: outputDir, force: true, gitignore: false },
+        },
+      ],
+      cwd: tmpDir,
+      verbose: true,
+      onProgress: (e) => events.push(e.type),
+    });
+
+    expect(result.deleted).toBeGreaterThan(0);
+    expect(result.modified).toBeGreaterThan(0);
+    expect(events).toContain('file-deleted');
+    expect(events).toContain('file-modified');
+  }, 90000);
+
+  it('verbose recursive extract logs recursion message', async () => {
+    await installMockPackage('verbose-dep', '1.0.0', { 'dep.md': '# Dep' }, tmpDir);
+    await installMockPackage('verbose-main-rec', '1.0.0', { 'main.md': '# Main' }, tmpDir);
+
+    const mainPkgJsonPath = path.join(tmpDir, 'node_modules', 'verbose-main-rec', 'package.json');
+    const mainPkgJson = JSON.parse(fs.readFileSync(mainPkgJsonPath).toString()) as object;
+    fs.writeFileSync(
+      mainPkgJsonPath,
+      JSON.stringify({
+        ...mainPkgJson,
+        npmdata: {
+          sets: [{ package: 'verbose-dep', output: { path: 'dep-out', gitignore: false } }],
+        },
+      }),
+    );
+
+    const outputDir = path.join(tmpDir, 'output-verbose-rec');
+    const result = await actionExtract({
+      entries: [{ package: 'verbose-main-rec', output: { path: outputDir, gitignore: false } }],
+      cwd: tmpDir,
+      verbose: true,
+    });
+
+    expect(result.added).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(outputDir, 'main.md'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDir, 'dep-out', 'dep.md'))).toBe(true);
+  }, 90000);
+
+  it('verbose mode logs warning before throwing conflict error and triggers rollback', async () => {
+    await installMockPackage(
+      'conflict-verbose-a',
+      '1.0.0',
+      { 'file-a.md': 'pkg content A' },
+      tmpDir,
+    );
+    await installMockPackage(
+      'conflict-verbose-b',
+      '1.0.0',
+      { 'conflict.md': 'pkg content B' },
+      tmpDir,
+    );
+
+    const outputDir = path.join(tmpDir, 'output-conflict-verbose');
+    fs.mkdirSync(outputDir, { recursive: true });
+    // Pre-create an unmanaged conflict file for the second entry
+    fs.writeFileSync(path.join(outputDir, 'conflict.md'), 'user unmanaged content');
+
+    await expect(
+      actionExtract({
+        entries: [
+          { package: 'conflict-verbose-a', output: { path: outputDir, gitignore: false } },
+          { package: 'conflict-verbose-b', output: { path: outputDir, gitignore: false } },
+        ],
+        cwd: tmpDir,
+        verbose: true,
+      }),
+    ).rejects.toThrow('Conflict');
+
+    // Files from the first entry should have been rolled back
+    expect(fs.existsSync(path.join(outputDir, 'file-a.md'))).toBe(false);
+    // The user's unmanaged file should remain
+    expect(fs.existsSync(path.join(outputDir, 'conflict.md'))).toBe(true);
+  }, 90000);
 });
