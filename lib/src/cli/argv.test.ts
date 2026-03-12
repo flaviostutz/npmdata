@@ -160,6 +160,17 @@ describe('applyArgvOverrides', () => {
     expect(result[0].output!.keepExisting).toBe(true);
   });
 
+  it('preserves config keepExisting=true when --keep-existing is not set on CLI', () => {
+    const entryWithKeepExisting: NpmdataExtractEntry = {
+      package: 'test-pkg',
+      output: { path: './current', keepExisting: true },
+      selector: {},
+    };
+    const parsed = parseArgv(['--packages', 'test-pkg']); // no --keep-existing
+    const result = applyArgvOverrides([entryWithKeepExisting], parsed);
+    expect(result[0].output!.keepExisting).toBe(true);
+  });
+
   it('applies --no-gitignore override', () => {
     const parsed = parseArgv(['--no-gitignore', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);

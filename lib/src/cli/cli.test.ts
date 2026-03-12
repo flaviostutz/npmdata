@@ -1,4 +1,3 @@
-/* eslint-disable no-undefined */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -105,13 +104,44 @@ describe('cli', () => {
       }),
     );
 
-    const prevExitCode = process.exitCode;
-    process.exitCode = undefined;
-    await cli(['node', 'npmdata', 'check'], tmpDir);
-    const { exitCode } = process;
-    process.exitCode = prevExitCode as typeof process.exitCode;
+    const exitCode = await cli(['node', 'npmdata', 'check'], tmpDir);
 
-    expect(exitCode).toBeUndefined(); // no drift → exits 0
+    expect(exitCode).toBe(0); // no drift → exits 0
+  }, 60_000);
+
+  it('routes to check command — returns exit code 1 when drift detected', async () => {
+    const outputDir = path.join(tmpDir, 'output-check-drift');
+
+    // Extract first
+    await cli(
+      [
+        'node',
+        'npmdata',
+        'extract',
+        '--packages',
+        PKG_NAME,
+        '--output',
+        outputDir,
+        '--no-gitignore',
+      ],
+      tmpDir,
+    );
+
+    // Tamper with an extracted file to create drift (files are read-only after extract)
+    const tamperedFile = path.join(outputDir, 'docs/guide.md');
+    fs.chmodSync(tamperedFile, 0o644);
+    fs.writeFileSync(tamperedFile, '# Tampered');
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.npmdatarc.json'),
+      JSON.stringify({
+        sets: [{ package: PKG_NAME, output: { path: outputDir, gitignore: false } }],
+      }),
+    );
+
+    const exitCode = await cli(['node', 'npmdata', 'check'], tmpDir);
+
+    expect(exitCode).toBe(1); // drift detected → exit code 1
   }, 60_000);
 
   it('routes to list command — lists managed files after extract', async () => {

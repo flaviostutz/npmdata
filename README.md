@@ -79,7 +79,7 @@ After `extract`, the output directory will contain the selected files alongside 
   .npmdata              ← tracks file ownership (package name + version)
 ```
 
-Config is resolved looking at files: `package.json` (`"npmdata"` key), `.npmdatarc`, `.npmdatarc.json`, `.npmdatarc.yaml`, or `npmdata.config.js`.
+Config is resolved looking at files: `package.json` (`"npmdata"` key), `.npmdatarc`, `.npmdatarc.json`, `.npmdatarc.yaml`, or `npmdata.config.js`. Pass `--config <file>` to point to an explicit config file and skip auto-discovery.
 
 ---
 
@@ -251,22 +251,27 @@ Extract:  --packages <specs>    Package specs (omit to read from config file)
           --dry-run             Preview without writing
           --upgrade             Reinstall even if present
           --presets <tags>      Only process entries matching these preset tags
+          --config <file>       Explicit config file path (overrides auto-discovery)
           --verbose, -v         Detailed progress output
           --silent              Final result line only
 
 Check:    --packages <specs>    Same format as extract
           --output, -o <dir>    Directory to check
           --presets <tags>      Only check entries matching these preset tags
+          --config <file>       Explicit config file path (overrides auto-discovery)
 
 Purge:    --packages <specs>    Package names to purge
           --output, -o <dir>    Directory to purge from
           --dry-run             Preview without deleting
           --presets <tags>      Only purge entries matching these preset tags
+          --config <file>       Explicit config file path (overrides auto-discovery)
           --silent              Suppress per-file output
 
 List:     --output, -o <dir>    Directory to inspect
+          --config <file>       Explicit config file path (overrides auto-discovery)
 
-Presets:  (no options)          Lists all preset tags defined in configuration,
+Presets:  --config <file>       Explicit config file path (overrides auto-discovery)
+                                Lists all preset tags defined in configuration,
                                 sorted alphabetically, one per line
 ```
 

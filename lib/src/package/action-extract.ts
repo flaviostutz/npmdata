@@ -152,14 +152,14 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
       // Phase 4: Abort on conflicts (unless force or unmanaged)
       if (extractionMap.conflicts.length > 0 && !outputConfig.force && !outputConfig.unmanaged) {
-        const conflictPaths = extractionMap.conflicts.map((c) => c.relPath).join(', ');
+        const conflictPaths = extractionMap.conflicts.map((c) => c.relPath).join('\n');
         if (verbose) {
           console.warn(
             `[verbose] extract: aborting due to ${extractionMap.conflicts.length} conflict(s) in ${outputDir}: ${conflictPaths}`,
           );
         }
         throw new Error(
-          `Conflict: the following files exist and are not managed by npmdata: ${conflictPaths}. ` +
+          `Conflict: the following files exist and are not managed by npmdata:\n${conflictPaths}\n` +
             `Use --force to overwrite or --unmanaged to skip.`,
         );
       }

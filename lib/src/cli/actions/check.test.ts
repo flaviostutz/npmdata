@@ -81,7 +81,7 @@ describe('runCheck — no drift', () => {
     expect(process.exitCode).toBeUndefined();
   });
 
-  it('prints "All managed files are in sync." when no drift', async () => {
+  it('prints "All managed files are in sync" when no drift', async () => {
     mockActionCheck.mockResolvedValue(NO_DRIFT);
     const logs: string[] = [];
     const spy = jest.spyOn(console, 'log').mockImplementation((...args) => {
@@ -89,33 +89,36 @@ describe('runCheck — no drift', () => {
     });
     await runCheck(CONFIG, [], '/cwd');
     spy.mockRestore();
-    expect(logs).toContain('All managed files are in sync.');
+    expect(logs).toContain('All managed files are in sync');
   });
 });
 
 describe('runCheck — drift detected', () => {
-  it('sets exitCode=1 when missing files found', async () => {
+  it('throws when missing files found', async () => {
     mockActionCheck.mockResolvedValue({ missing: ['docs/a.md'], modified: [], extra: [] });
     const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    await runCheck(CONFIG, [], '/cwd');
+    await expect(runCheck(CONFIG, [], '/cwd')).rejects.toThrow(
+      'Check failed: some managed files are out of sync',
+    );
     spy.mockRestore();
-    expect(process.exitCode).toBe(1);
   });
 
-  it('sets exitCode=1 when modified files found', async () => {
+  it('throws when modified files found', async () => {
     mockActionCheck.mockResolvedValue({ missing: [], modified: ['docs/b.md'], extra: [] });
     const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    await runCheck(CONFIG, [], '/cwd');
+    await expect(runCheck(CONFIG, [], '/cwd')).rejects.toThrow(
+      'Check failed: some managed files are out of sync',
+    );
     spy.mockRestore();
-    expect(process.exitCode).toBe(1);
   });
 
-  it('sets exitCode=1 when extra files found', async () => {
+  it('throws when extra files found', async () => {
     mockActionCheck.mockResolvedValue({ missing: [], modified: [], extra: ['docs/c.md'] });
     const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    await runCheck(CONFIG, [], '/cwd');
+    await expect(runCheck(CONFIG, [], '/cwd')).rejects.toThrow(
+      'Check failed: some managed files are out of sync',
+    );
     spy.mockRestore();
-    expect(process.exitCode).toBe(1);
   });
 
   it('logs each missing file prefixed with "missing:"', async () => {
@@ -128,7 +131,7 @@ describe('runCheck — drift detected', () => {
     const spy = jest.spyOn(console, 'log').mockImplementation((...args) => {
       logs.push(args.join(' '));
     });
-    await runCheck(CONFIG, [], '/cwd');
+    await expect(runCheck(CONFIG, [], '/cwd')).rejects.toThrow();
     spy.mockRestore();
     expect(logs).toContain('missing: docs/a.md');
     expect(logs).toContain('missing: docs/b.md');
@@ -144,7 +147,7 @@ describe('runCheck — drift detected', () => {
     const spy = jest.spyOn(console, 'log').mockImplementation((...args) => {
       logs.push(args.join(' '));
     });
-    await runCheck(CONFIG, [], '/cwd');
+    await expect(runCheck(CONFIG, [], '/cwd')).rejects.toThrow();
     spy.mockRestore();
     expect(logs).toContain('modified: docs/c.md');
   });
@@ -159,7 +162,7 @@ describe('runCheck — drift detected', () => {
     const spy = jest.spyOn(console, 'log').mockImplementation((...args) => {
       logs.push(args.join(' '));
     });
-    await runCheck(CONFIG, [], '/cwd');
+    await expect(runCheck(CONFIG, [], '/cwd')).rejects.toThrow();
     spy.mockRestore();
     expect(logs).toContain('extra: docs/d.md');
   });

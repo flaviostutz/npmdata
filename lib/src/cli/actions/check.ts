@@ -46,8 +46,8 @@ export async function runCheck(
     for (const f of summary.missing) console.log(`missing: ${f}`);
     for (const f of summary.modified) console.log(`modified: ${f}`);
     for (const f of summary.extra) console.log(`extra: ${f}`);
-    process.exitCode = 1;
+    throw new Error('Check failed: some managed files are out of sync');
   } else {
-    console.log('All managed files are in sync.');
+    console.log('All managed files are in sync');
   }
 }
