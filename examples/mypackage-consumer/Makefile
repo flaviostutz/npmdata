@@ -15,6 +15,7 @@ test: clean install
 	@echo ">>>> mypackage-consumer"
 	pnpm exec example-files-package extract --output output
 
+	# Test 1
 	# fail if a expected extracted file doesn't exist
 	test -e output/.configs/app.config.json
 	test -e output/docs/adrs/adr-001-sample1.md
@@ -29,6 +30,28 @@ test: clean install
 	test ! -e output/docs/adrs/adr-001-sample1.md
 
 	pnpm exec example-files-package --output output
+
+	# Test 2
+	rm -rf output
+	pnpm exec example-files-package extract --output output --presets basic
+	test -e output/docs/adrs/adr-001-sample1.md
+	test -e output/conf/globals.js
+	test ! -e output/conf/config-schema.js
+
+	# Test 3
+	rm -rf output
+	pnpm exec example-files-package extract --output output --presets eslint
+	test ! -e output/docs/adrs/adr-001-sample1.md
+	test -e output/conf/globals.js
+	test -e output/conf/config-schema.js
+
+	# Test 4
+	rm -rf output
+	pnpm exec example-files-package extract --output output --presets "eslint,basic"
+	test -e output/docs/adrs/adr-001-sample1.md
+	test -e output/conf/globals.js
+	test -e output/conf/config-schema.js
+
 
 clean:
 	@rm -rf node_modules

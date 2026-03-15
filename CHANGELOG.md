@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.18.6 (2026-03-15)
+
+### Maintenance
+
+* release: 0.18.5 [[710955d](https://github.com/flaviostutz/npmdata/commit/710955da4cd40ba0f8475fa308112e5244b1a7f5)]
+* fix lint [[e9cad74](https://github.com/flaviostutz/npmdata/commit/e9cad742d9cbd2282259c4f3b93daa2e9c4cfe57)]
+
+### Misc
+
+
+### Info
+
+* Authors: Flavio Stutz <flaviostutz@gmail.com>
+
+
+## 0.18.5 (2026-03-14)
+
+### Maintenance
+
+* release: 0.18.4 [[fc8deaf](https://github.com/flaviostutz/npmdata/commit/fc8deaf1281f71ffeda4f62473a8a7206093aa10)]
+* fix bug with nested presets [[29e355f](https://github.com/flaviostutz/npmdata/commit/29e355fda3caef4dffa02541fb32b78de409c23c)]
+* fix preset extraction bugs [[f6b608e](https://github.com/flaviostutz/npmdata/commit/f6b608ed8c80a95a6cea35721fdd8740133ae5fd)]
+
+### Misc
+
+
+### Info
+
+* Authors: Flavio Stutz <flaviostutz@gmail.com>
+
+
+## 0.18.4 (2026-03-14)
+
+### Maintenance
+
+* release: 0.18.3 [[f980b6c](https://github.com/flaviostutz/npmdata/commit/f980b6cb26ef816286dced3f7c6da69d0a743388)]
+* fix preset extraction bugs [[f6b608e](https://github.com/flaviostutz/npmdata/commit/f6b608ed8c80a95a6cea35721fdd8740133ae5fd)]
+* manual refactoring of recursivity filtering with presets [[9ab1401](https://github.com/flaviostutz/npmdata/commit/9ab1401a9743b983c1f6747a88ea9b70418fd4b8)]
+
+### Misc
+
+
+### Info
+
+* Authors: Flavio Stutz <flaviostutz@gmail.com>
+
+
 ## 0.18.3 (2026-03-13)
 
 ### Maintenance
