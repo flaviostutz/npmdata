@@ -28,7 +28,10 @@
         },
         "output": {
           "path": "."
-        }
+        },
+        "presets": [
+          "basic"
+        ]
       },
       {
         "package": "eslint@8",
@@ -41,7 +44,7 @@
           "path": "."
         },
         "presets": [
-          "eslint"
+          "eslint", "basic"
         ]
       },
       {

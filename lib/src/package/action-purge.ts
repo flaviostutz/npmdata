@@ -94,7 +94,7 @@ async function collectPurgePlan(
       const siblingNames = new Set(entries.map((e) => parsePackageSpec(e.package).name));
       const presetFilteredSets = filterEntriesByPresets(
         pkgNpmdataSets,
-        entry.selector?.presets ?? [],
+        entry.selector?.presets ?? entry.presets ?? [],
       );
       const filteredSets = presetFilteredSets.filter(
         (e) =>

@@ -245,9 +245,12 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
         // npmdata.sets from triggering the circular-dependency guard.
         const siblingNames = new Set(entries.map((e) => parsePackageSpec(e.package).name));
 
-        // Apply selector.presets: filter the target package's own sets by the preset tags
-        // requested by the consumer. When selector.presets is empty, all sets pass through.
-        const presetFilteredSets = filterEntriesByPresets(pkgNpmdataSets, selector.presets);
+        // Apply preset filtering to the target package's own nested sets.
+        // Prefer selector.presets (explicit override) but fall back to entry.presets so that
+        // the consumer's entry-level preset tag is automatically forwarded into recursive
+        // resolution without requiring it to be repeated inside selector.
+        const nestedPresets = selector.presets ?? entry.presets;
+        const presetFilteredSets = filterEntriesByPresets(pkgNpmdataSets, nestedPresets);
         if (verbose) {
           console.log(
             `[verbose] extract: ${pkg.name} has ${pkgNpmdataSets.length} npmdata set(s), ${presetFilteredSets.length} after preset filter`,
@@ -261,13 +264,13 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
         );
 
         if (
-          selector.presets &&
-          selector.presets.length > 0 &&
+          nestedPresets &&
+          nestedPresets.length > 0 &&
           pkgNpmdataSets.length > 0 &&
           presetFilteredSets.length === 0
         ) {
           throw new Error(
-            `Presets (${selector.presets.join(', ')}) not found in any set of package "${pkg.name}"`,
+            `Presets (${nestedPresets.join(', ')}) not found in any set of package "${pkg.name}"`,
           );
         }
 

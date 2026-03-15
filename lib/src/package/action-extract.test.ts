@@ -284,6 +284,53 @@ describe('actionExtract', () => {
     expect(fs.existsSync(path.join(outputDir, 'nested', 'data', 'sample.csv'))).toBe(false);
   }, 90000);
 
+  it('entry.presets filters nested npmdata.sets even when selector.presets is absent', async () => {
+    // Same setup as the selector.presets test but the preset is declared at entry level only.
+    await installMockPackage('ep-nested-docs', '1.0.0', { 'docs/guide.md': '# Guide' }, tmpDir);
+    await installMockPackage('ep-nested-data', '1.0.0', { 'data/sample.csv': 'a,b' }, tmpDir);
+
+    await installMockPackage('ep-preset-main', '1.0.0', { 'main.md': '# Main' }, tmpDir);
+    const mainPkgJsonPath = path.join(tmpDir, 'node_modules', 'ep-preset-main', 'package.json');
+    const existing = JSON.parse(fs.readFileSync(mainPkgJsonPath).toString()) as object;
+    fs.writeFileSync(
+      mainPkgJsonPath,
+      JSON.stringify({
+        ...existing,
+        npmdata: {
+          sets: [
+            {
+              package: 'ep-nested-docs',
+              presets: ['docs'],
+              output: { path: 'nested', gitignore: false },
+            },
+            {
+              package: 'ep-nested-data',
+              presets: ['data'],
+              output: { path: 'nested', gitignore: false },
+            },
+          ],
+        },
+      }),
+    );
+
+    const outputDir = path.join(tmpDir, 'ep-output');
+
+    // No selector.presets — preset is only on the entry itself.
+    await actionExtract({
+      entries: [
+        {
+          package: 'ep-preset-main',
+          presets: ['docs'],
+          output: { path: outputDir, gitignore: false },
+        },
+      ],
+      cwd: tmpDir,
+    });
+
+    expect(fs.existsSync(path.join(outputDir, 'nested', 'docs', 'guide.md'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDir, 'nested', 'data', 'sample.csv'))).toBe(false);
+  }, 90000);
+
   it('throws when selector.presets does not match any set in the producer package', async () => {
     await installMockPackage('no-match-pkg', '1.0.0', { 'main.md': '# Main' }, tmpDir);
     const mainPkgJsonPath = path.join(tmpDir, 'node_modules', 'no-match-pkg', 'package.json');
