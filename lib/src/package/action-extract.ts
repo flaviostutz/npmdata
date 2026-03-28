@@ -333,12 +333,26 @@ async function updateOutputDirMetadata(
         (m) =>
           !deletedPaths.has(m.path) &&
           !addedEntries.some((e) => e.path === m.path) &&
-          !((m.kind ?? 'file') === 'symlink' && currentRelevantPackages.has(m.packageName)),
+          !(
+            (m.kind ?? 'file') === 'symlink' &&
+            currentRelevantPackages.has(m.packageName) &&
+            !desiredSymlinkEntries.some((entry) => entry.path === m.path)
+          ),
       )
       .map((m) => [m.path, m]),
   );
   for (const e of addedEntries) updatedByPath.set(e.path, e);
-  for (const entry of desiredSymlinkEntries) updatedByPath.set(entry.path, entry);
+  for (const entry of desiredSymlinkEntries) {
+    const existingEntry = updatedByPath.get(entry.path);
+    if (
+      existingEntry &&
+      (existingEntry.kind ?? 'file') === 'symlink' &&
+      existingEntry.packageName === entry.packageName
+    ) {
+      continue;
+    }
+    updatedByPath.set(entry.path, entry);
+  }
 
   const updatedEntries = [...updatedByPath.values()];
   await writeMarker(markerPath(outputDir), updatedEntries);

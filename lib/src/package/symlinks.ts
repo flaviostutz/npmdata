@@ -22,13 +22,24 @@ export async function createSymlinks(outputDir: string, configs: SymlinkConfig[]
       const linkName = path.basename(relPath);
       const linkPath = path.join(targetDir, linkName);
 
+      const relTarget = path.relative(targetDir, srcAbsPath);
+
+      if (isSymlink(linkPath)) {
+        try {
+          if (fs.readlinkSync(linkPath) === relTarget) {
+            continue;
+          }
+        } catch {
+          // fall through and recreate the symlink below
+        }
+      }
+
       // Remove existing symlink if present
       if (fs.existsSync(linkPath) || isSymlink(linkPath)) {
         fs.unlinkSync(linkPath);
       }
 
       // Create relative symlink
-      const relTarget = path.relative(targetDir, srcAbsPath);
       fs.symlinkSync(relTarget, linkPath);
     }
   }

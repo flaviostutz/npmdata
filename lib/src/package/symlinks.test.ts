@@ -49,6 +49,25 @@ describe('createSymlinks', () => {
     expect(target).not.toBe('/dev/null');
   });
 
+  it('keeps an existing correct symlink untouched', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'docs', 'file.md'), 'v1');
+
+    const targetDir = path.join(tmpDir, 'links');
+    fs.mkdirSync(targetDir, { recursive: true });
+    const linkPath = path.join(targetDir, 'file.md');
+    const relTarget = path.relative(targetDir, path.join(outputDir, 'docs', 'file.md'));
+    fs.symlinkSync(relTarget, linkPath);
+
+    const before = fs.lstatSync(linkPath);
+    await createSymlinks(outputDir, [{ source: 'docs/file.md', target: '../links' }]);
+    const after = fs.lstatSync(linkPath);
+
+    expect(fs.readlinkSync(linkPath)).toBe(relTarget);
+    expect(after.ino).toBe(before.ino);
+  });
+
   it('no-ops on empty configs', async () => {
     await expect(createSymlinks(tmpDir, [])).resolves.toBeUndefined();
   });

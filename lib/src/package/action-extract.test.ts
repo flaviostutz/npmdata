@@ -102,6 +102,57 @@ describe('actionExtract', () => {
     );
   }, 60000);
 
+  it('keeps unchanged symlinks and their original marker version across package bumps', async () => {
+    await installMockPackage('symlink-bump-pkg', '1.0.0', { 'docs/guide.md': '# Guide' }, tmpDir);
+
+    const outputDir = path.join(tmpDir, 'output-bump');
+    await actionExtract({
+      entries: [
+        {
+          package: 'symlink-bump-pkg',
+          output: {
+            path: outputDir,
+            gitignore: false,
+            symlinks: [{ source: 'docs/*.md', target: 'links' }],
+          },
+        },
+      ],
+      cwd: tmpDir,
+    });
+
+    const linkPath = path.join(outputDir, 'links', 'guide.md');
+    const before = fs.lstatSync(linkPath);
+
+    await installMockPackage('symlink-bump-pkg', '1.0.1', { 'docs/guide.md': '# Guide' }, tmpDir);
+    await actionExtract({
+      entries: [
+        {
+          package: 'symlink-bump-pkg',
+          output: {
+            path: outputDir,
+            gitignore: false,
+            symlinks: [{ source: 'docs/*.md', target: 'links' }],
+          },
+        },
+      ],
+      cwd: tmpDir,
+    });
+
+    const after = fs.lstatSync(linkPath);
+    const marker = await readMarker(path.join(outputDir, MARKER_FILE));
+    const symlinkEntry = marker.find((entry) => entry.path === 'links/guide.md');
+
+    expect(after.ino).toBe(before.ino);
+    expect(symlinkEntry).toEqual(
+      expect.objectContaining({
+        path: 'links/guide.md',
+        packageName: 'symlink-bump-pkg',
+        packageVersion: '1.0.0',
+        kind: 'symlink',
+      }),
+    );
+  }, 60000);
+
   it('removes only managed stale symlinks during extract', async () => {
     await installMockPackage('symlink-stale-pkg', '1.0.0', { 'docs/guide.md': '# Guide' }, tmpDir);
 
