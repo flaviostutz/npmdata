@@ -29,6 +29,7 @@ Options:
   --dry-run               Report changes without writing to disk.
   --upgrade               Force fresh package install even if satisfying version installed.
   --presets <tags>        Comma-separated preset tags; only matching entries are processed. Overrides config defaultPresets.
+  --all                   Ignore config defaultPresets and process all configured entries.
   --config <file>         Path to a config file (overrides auto-discovered .filedistrc / package.json).
   --silent                Suppress per-file output; print only final summary line.
   --verbose, -v           Print detailed step information.
@@ -52,6 +53,7 @@ Options:
   --content-regex <re>    Regex strings for content filtering.
   --managed [bool]        Silently skip unmanaged entries. Use --managed=false.
   --presets <tags>        Comma-separated preset tags; only matching entries are checked. Overrides config defaultPresets.
+  --all                   Ignore config defaultPresets and check all configured entries.
   --config <file>         Path to a config file (overrides auto-discovered .filedistrc / package.json).
   --verbose, -v           Print detailed comparison information.
   --help                  Print this help text.
@@ -87,6 +89,7 @@ Options:
   --packages <specs>      Comma-separated package specs. Limits purge to matching entries.
   --output, -o <dir>      Output directory to purge.
   --presets <tags>        Comma-separated preset tags; only matching entries are purged. Overrides config defaultPresets.
+  --all                   Ignore config defaultPresets and purge all configured entries.
   --dry-run               Print what would be removed without deleting.
   --config <file>         Path to a config file (overrides auto-discovered .filedistrc / package.json).
   --silent                Suppress per-file output.

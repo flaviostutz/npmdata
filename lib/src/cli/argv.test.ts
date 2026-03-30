@@ -59,6 +59,19 @@ describe('parseArgv', () => {
     expect(parseArgv(['--presets', 'docs,api']).presets).toEqual(['docs', 'api']);
   });
 
+  it('parses --all flag', () => {
+    expect(parseArgv(['--all']).all).toBe(true);
+    expect(parseArgv(['--all=true']).all).toBe(true);
+    expect(parseArgv(['--all=false']).all).toBe(false);
+    expect(parseArgv([]).all).toBeUndefined();
+  });
+
+  it('throws when --all and --presets are both set', () => {
+    expect(() => parseArgv(['--all', '--presets', 'docs'])).toThrow(
+      '--all and --presets are mutually exclusive',
+    );
+  });
+
   it('parses boolean flags', () => {
     const parsed = parseArgv([
       '--dry-run',
@@ -325,5 +338,31 @@ describe('resolveEntriesFromConfigAndArgs', () => {
 
     expect(entries).toHaveLength(1);
     expect(entries[0].selector?.presets).toEqual(['docs']);
+  });
+
+  it('uses --all to ignore config defaultPresets', () => {
+    const config = {
+      defaultPresets: ['docs'],
+      sets: [
+        { package: 'pkg-docs', output: { path: '.' }, presets: ['docs'] },
+        { package: 'pkg-api', output: { path: '.' }, presets: ['api'] },
+      ],
+    };
+
+    const entries = resolveEntriesFromConfigAndArgs(config, ['--all']);
+
+    expect(entries).toHaveLength(2);
+  });
+
+  it('does not forward selector.presets in ad-hoc --packages mode when --all is used', () => {
+    const config = {
+      defaultPresets: ['docs'],
+      sets: [],
+    };
+
+    const entries = resolveEntriesFromConfigAndArgs(config, ['--packages', 'pkg-docs', '--all']);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].selector?.presets).toBeUndefined();
   });
 });

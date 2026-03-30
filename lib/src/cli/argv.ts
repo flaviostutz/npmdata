@@ -17,6 +17,7 @@ export type ParsedArgv = {
   files?: string[];
   exclude?: string[];
   contentRegexes?: string[];
+  all?: boolean;
   presets?: string[];
   configFile?: string;
   force?: boolean;
@@ -37,6 +38,10 @@ export function resolveEffectivePresets(
   parsed: ParsedArgv,
   config?: FiledistCliConfig | null,
 ): string[] {
+  if (parsed.all === true) {
+    return [];
+  }
+
   return parsed.presets ?? config?.defaultPresets ?? [];
 }
 
@@ -105,6 +110,12 @@ export function parseArgv(argv: string[]): ParsedArgv {
   }
 
   const packages = getCommaSplit('--packages');
+  const all = getBoolFlag('--all');
+  const presets = getCommaSplit('--presets');
+
+  if (all === true && presets && presets.length > 0) {
+    throw new Error('--all and --presets are mutually exclusive');
+  }
 
   const verboseFlag = getBoolFlag('--verbose');
 
@@ -114,7 +125,8 @@ export function parseArgv(argv: string[]): ParsedArgv {
     files: getCommaSplit('--files'),
     exclude: getCommaSplit('--exclude'),
     contentRegexes: getCommaSplit('--content-regex'),
-    presets: getCommaSplit('--presets'),
+    all,
+    presets,
     configFile: getValue('--config'),
     force,
     keepExisting,

@@ -132,6 +132,21 @@ describe('runPurge — options forwarding', () => {
     expect(callArg.entries).toHaveLength(1);
     expect(callArg.entries[0].package).toBe('pkg-api@1.0.0');
   });
+
+  it('uses --all to ignore config defaultPresets', async () => {
+    const config = {
+      defaultPresets: ['docs'],
+      sets: [
+        { package: 'pkg-docs@1.0.0', output: { path: './docs' }, presets: ['docs'] },
+        { package: 'pkg-api@1.0.0', output: { path: './api' }, presets: ['api'] },
+      ],
+    };
+
+    await runPurge(config, ['--all'], '/cwd');
+
+    const callArg = mockActionPurge.mock.calls[0][0];
+    expect(callArg.entries).toHaveLength(2);
+  });
 });
 
 describe('runPurge — onProgress handler', () => {

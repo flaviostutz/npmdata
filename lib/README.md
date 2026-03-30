@@ -135,6 +135,7 @@ Config is resolved using [cosmiconfig](https://github.com/cosmiconfig/cosmiconfi
 
 All runner flags (`--dry-run`, `--silent`, `--verbose`, `--gitignore=false`, `--managed=false`, `--presets`, `--output`) work as usual.
 When `filedist.defaultPresets` is defined, `extract`, `check`, and `purge` behave as if `--presets <tags>` had been passed automatically. Passing `--presets` explicitly overrides that configured default for the current invocation.
+Use `--all` to ignore `defaultPresets` for one run and process every configured entry.
 
 Config-file mode can mix npm packages and git repositories in the same `sets` array. Use the `git:` prefix for git entries.
 

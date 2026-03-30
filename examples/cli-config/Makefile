@@ -68,6 +68,19 @@ test: clean install
 	pnpm exec filedist presets | grep -x "extra"
 	pnpm exec filedist presets | grep -x "nested-eslint"
 
+	# --- Test 5: --all ignores defaultPresets and processes every configured entry ---
+	rm -rf output
+	pnpm exec filedist extract --all
+	test -e output/docs/README.md
+	test -e output/data/users-dataset/user1.json
+	test -e output/eslint/conf/globals.js
+	test -e output/nested-eslint/conf/globals.js
+	pnpm exec filedist check --all
+	pnpm exec filedist purge --all
+	test ! -e output/docs/README.md
+	test ! -e output/data/users-dataset/user1.json
+	test ! -e output/nested-eslint/conf/globals.js
+
 	@echo "All config-file mode tests passed"
 
 clean:

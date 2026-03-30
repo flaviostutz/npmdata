@@ -98,4 +98,33 @@ describe('binpkg defaultPresets forwarding', () => {
       process.cwd(),
     );
   });
+
+  it('does not inject defaultPresets when the user passes --all', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'pkg', 'package.json'),
+      JSON.stringify({
+        name: 'example-files-package',
+        version: '1.0.0',
+        filedist: { defaultPresets: ['basic'] },
+      }),
+    );
+
+    await expect(binpkg(binDir, ['extract', '--output', 'output', '--all'])).rejects.toThrow(
+      'process.exit(0)',
+    );
+
+    expect(mockCli).toHaveBeenCalledWith(
+      [
+        'node',
+        'filedist',
+        'extract',
+        '--output',
+        'output',
+        '--all',
+        '--packages',
+        'example-files-package',
+      ],
+      process.cwd(),
+    );
+  });
 });

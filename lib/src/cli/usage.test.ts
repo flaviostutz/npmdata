@@ -27,6 +27,7 @@ describe('printUsage', () => {
     printUsage('extract');
     expect(lines.join('\n')).toMatch(/filedist.*extract/i);
     expect(lines.join('\n')).toMatch(/--output/);
+    expect(lines.join('\n')).toMatch(/--all/);
     expect(lines.join('\n')).toMatch(/--nosync/);
     expect(lines.join('\n')).toMatch(/git:github\.com/);
     expect(lines.join('\n')).toMatch(/defaultpresets/i);
@@ -48,6 +49,7 @@ describe('printUsage', () => {
   it('prints purge usage when command is "purge"', () => {
     printUsage('purge');
     expect(lines.join('\n')).toMatch(/filedist purge/i);
+    expect(lines.join('\n')).toMatch(/--all/);
     expect(lines.join('\n')).toMatch(/remove/i);
   });
 

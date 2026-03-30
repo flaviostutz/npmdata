@@ -100,13 +100,17 @@ pnpm exec filedist extract
 # override the configured default and run a different preset set
 pnpm exec filedist extract --presets extra
 
+# ignore the configured default and process all configured entries
+pnpm exec filedist extract --all
+
 # check using the configured default preset set
 pnpm exec filedist check
 ```
 
 When `defaultPresets` is defined at the root of the config, `extract`, `check`, and `purge`
 behave as if those tags had been passed via `--presets`. Passing `--presets` explicitly overrides
-the configured default for that one invocation.
+the configured default for that one invocation. Passing `--all` bypasses `defaultPresets`
+entirely for that command.
 
 > **`presets` vs `selector.presets`**
 >

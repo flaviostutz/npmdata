@@ -35,7 +35,11 @@ export async function binpkg(binDir: string, args: string[]): Promise<void> {
   const defaultPresets = pkgJson.filedist?.defaultPresets ?? [];
 
   const effectiveArgs = [...args];
-  if (!effectiveArgs.includes('--presets') && defaultPresets.length > 0) {
+  if (
+    !effectiveArgs.includes('--presets') &&
+    !effectiveArgs.includes('--all') &&
+    defaultPresets.length > 0
+  ) {
     effectiveArgs.push('--presets', defaultPresets.join(','));
   }
 

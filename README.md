@@ -117,6 +117,7 @@ After `extract`, the output directory will contain the selected files alongside 
 Config is resolved looking at files: `package.json` (`"filedist"` key), `.filedistrc`, `.filedistrc.json`, `.filedistrc.yaml`, or `filedist.config.js`. Pass `--config <file>` to point to an explicit config file and skip auto-discovery.
 
 When `defaultPresets` is defined at the root of the config, `extract`, `check`, and `purge` behave the same as if `--presets <tags>` had been passed. An explicit `--presets` flag overrides the configured default for that invocation.
+Use `--all` to ignore `defaultPresets` for one command and process every configured entry.
 
 The same config file can mix npm packages and git repositories. Use the `git:` prefix for git entries. A git repository source can also provide its own `.filedistrc` or `package.json#filedist` with `sets`, and those nested sets participate in the same hierarchical resolution.
 
@@ -296,6 +297,7 @@ npx filedist presets
 ```
 
 In config-file mode you can define a root-level `defaultPresets` array so `extract`, `check`, and `purge` automatically run the same filtered subset without requiring `--presets` every time.
+Use `--all` when you want to bypass that default and process the full configured set.
 
 ---
 
@@ -432,6 +434,7 @@ Extract:  --packages <specs>    Package specs (omit to read from config file)
           --dry-run             Preview without writing
           --upgrade             Reinstall even if present
           --presets <tags>      Only process entries matching these preset tags
+          --all                 Ignore config defaultPresets and process all configured entries
           --config <file>       Explicit config file path (overrides auto-discovery)
           --verbose, -v         Detailed progress output
           --silent              Final result line only
@@ -439,12 +442,14 @@ Extract:  --packages <specs>    Package specs (omit to read from config file)
 Check:    --packages <specs>    Same format as extract
           --output, -o <dir>    Directory to check
           --presets <tags>      Only check entries matching these preset tags
+          --all                 Ignore config defaultPresets and check all configured entries
           --config <file>       Explicit config file path (overrides auto-discovery)
 
 Purge:    --packages <specs>    Package names to purge
           --output, -o <dir>    Directory to purge from
           --dry-run             Preview without deleting
           --presets <tags>      Only purge entries matching these preset tags
+          --all                 Ignore config defaultPresets and purge all configured entries
           --config <file>       Explicit config file path (overrides auto-discovery)
           --silent              Suppress per-file output
 

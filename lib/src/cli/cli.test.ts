@@ -357,4 +357,36 @@ describe('cli', () => {
 
     expect(fs.existsSync(path.join(overrideOutput, 'docs/api.md'))).toBe(true);
   }, 60_000);
+
+  it('--all ignores config defaultPresets and processes all matching entries', async () => {
+    const defaultOutput = path.join(tmpDir, 'output-default');
+    const allOutput = path.join(tmpDir, 'output-all');
+    const configFile = path.join(tmpDir, 'all-default-presets.json');
+
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify({
+        defaultPresets: ['docs'],
+        sets: [
+          {
+            package: PKG_NAME,
+            selector: { files: ['docs/guide.md'] },
+            output: { path: defaultOutput, gitignore: false },
+            presets: ['docs'],
+          },
+          {
+            package: PKG_NAME,
+            selector: { files: ['docs/api.md'] },
+            output: { path: allOutput, gitignore: false },
+            presets: ['api'],
+          },
+        ],
+      }),
+    );
+
+    await cli(['node', 'filedist', 'extract', '--config', configFile, '--all'], tmpDir);
+
+    expect(fs.existsSync(path.join(defaultOutput, 'docs/guide.md'))).toBe(true);
+    expect(fs.existsSync(path.join(allOutput, 'docs/api.md'))).toBe(true);
+  }, 60_000);
 });
