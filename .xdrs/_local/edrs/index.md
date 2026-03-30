@@ -5,3 +5,4 @@ Project-local engineering decisions for filedist. These decisions must not be sh
 ## Application
 
 - [_local-edr-001](application/001-project-semantics-and-structure.md) - **Project semantics and structure**
+- [_local-edr-002](application/002-supported-platforms.md) - **Supported platforms**
