@@ -5,10 +5,37 @@ const exampleDir = process.cwd();
 const outputDir = path.join(exampleDir, 'output');
 const linkDir = path.join(outputDir, 'data-symlink');
 
+function listFiles(dirPath) {
+  return fs.readdirSync(dirPath, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      return listFiles(entryPath);
+    }
+    if (entry.isFile()) {
+      return [entryPath];
+    }
+    return [];
+  });
+}
+
 const expectedFiles = [
-  path.join(outputDir, 'docs', 'guide.md'),
+  path.join(outputDir, 'docs', 'README.md'),
+  path.join(outputDir, 'docs', 'adrs', 'adr-001-sample1.md'),
+  path.join(outputDir, 'docs', 'adrs', 'adr-002-sample2.md'),
   path.join(outputDir, 'data', 'users-dataset', 'user1.json'),
-];
+  path.join(outputDir, 'data', 'users-dataset', 'user2.json'),
+].sort();
+
+const actualFiles = [
+  ...listFiles(path.join(outputDir, 'docs')),
+  ...listFiles(path.join(outputDir, 'data')),
+].sort();
+
+if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
+  throw new Error(
+    `Expected exported file set to be ${expectedFiles.join(', ')}, but got ${actualFiles.join(', ')}`,
+  );
+}
 
 for (const filePath of expectedFiles) {
   if (!fs.existsSync(filePath)) {
@@ -24,7 +51,17 @@ for (const filePath of expectedFiles) {
 const expectedLinks = [
   ['users-dataset', path.join(outputDir, 'data', 'users-dataset')],
   ['user1.json', path.join(outputDir, 'data', 'users-dataset', 'user1.json')],
-];
+  ['user2.json', path.join(outputDir, 'data', 'users-dataset', 'user2.json')],
+].sort((left, right) => left[0].localeCompare(right[0]));
+
+const actualLinks = fs.readdirSync(linkDir).sort();
+const expectedLinkNames = expectedLinks.map(([linkName]) => linkName);
+
+if (JSON.stringify(actualLinks) !== JSON.stringify(expectedLinkNames)) {
+  throw new Error(
+    `Expected symlink set to be ${expectedLinkNames.join(', ')}, but got ${actualLinks.join(', ')}`,
+  );
+}
 
 for (const [linkName, expectedTarget] of expectedLinks) {
   const linkPath = path.join(linkDir, linkName);
