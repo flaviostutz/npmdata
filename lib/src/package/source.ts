@@ -90,7 +90,9 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
       }
 
       const target = parsePackageTarget(entry.package);
-      const cacheKey = `${target.source}|${target.packageName}|${target.requestedVersion ?? ''}`;
+      const sparsePatterns = entry.selector?.files ?? [];
+      const patternsKey = [...sparsePatterns].sort().join('\0');
+      const cacheKey = `${target.source}|${target.packageName}|${target.requestedVersion ?? ''}|${patternsKey}`;
 
       if (!upgrade) {
         const cached = packageCache.get(cacheKey);
@@ -99,7 +101,7 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
 
       const resolved =
         target.source === 'git'
-          ? resolveGitPackage(target, cwd, tempRoot, ensureTempRoot, verbose)
+          ? resolveGitPackage(target, cwd, tempRoot, ensureTempRoot, verbose, sparsePatterns)
           : resolveNpmPackage(target, upgrade, cwd, verbose);
 
       const packageSource = await resolved;
@@ -233,10 +235,11 @@ async function resolveGitPackage(
   tempRoot: string,
   ensureTempRoot: () => void,
   verbose: boolean,
+  sparsePatterns: string[] = [],
 ): Promise<ResolvedPackageSource> {
   ensureTempRoot();
 
-  const cloneDir = path.join(tempRoot, buildCloneDirName(target));
+  const cloneDir = path.join(tempRoot, buildCloneDirName(target, sparsePatterns));
   if (fs.existsSync(cloneDir)) {
     fs.rmSync(cloneDir, { recursive: true, force: true });
   }
@@ -246,9 +249,53 @@ async function resolveGitPackage(
       `[verbose] source: cloning ${target.repository} into ${formatDisplayPath(cloneDir, cwd)}`,
     );
   }
-  spawnWithLog('git', ['clone', target.repository!, cloneDir], cwd, verbose, true);
-  if (target.requestedVersion) {
-    spawnWithLog('git', ['-C', cloneDir, 'checkout', target.requestedVersion], cwd, verbose, true);
+
+  if (sparsePatterns.length > 0) {
+    // Sparse clone: fetch tree objects but defer blob downloads until checkout
+    spawnWithLog(
+      'git',
+      ['clone', '--filter=blob:none', '--no-checkout', '--sparse', target.repository!, cloneDir],
+      cwd,
+      verbose,
+      true,
+    );
+
+    // Always include config file names so nested filedist config loading works
+    const configFilePatterns = [
+      'package.json',
+      '.filedistrc',
+      '.filedistrc.json',
+      '.filedistrc.yaml',
+      '.filedistrc.yml',
+      'filedist.config.js',
+      'filedist.config.cjs',
+    ];
+    const allPatterns = [...new Set([...configFilePatterns, ...sparsePatterns])];
+    spawnWithLog(
+      'git',
+      ['-C', cloneDir, 'sparse-checkout', 'set', '--no-cone', ...allPatterns],
+      cwd,
+      verbose,
+      true,
+    );
+
+    // Checkout the desired ref (or HEAD when no version is specified)
+    const checkoutArgs = target.requestedVersion
+      ? ['-C', cloneDir, 'checkout', target.requestedVersion]
+      : ['-C', cloneDir, 'checkout'];
+    spawnWithLog('git', checkoutArgs, cwd, verbose, true);
+  } else {
+    // No file patterns specified: perform a full clone
+    spawnWithLog('git', ['clone', target.repository!, cloneDir], cwd, verbose, true);
+    if (target.requestedVersion) {
+      spawnWithLog(
+        'git',
+        ['-C', cloneDir, 'checkout', target.requestedVersion],
+        cwd,
+        verbose,
+        true,
+      );
+    }
   }
 
   const revision = spawnWithLog('git', ['-C', cloneDir, 'rev-parse', 'HEAD'], cwd, verbose, true)
@@ -267,13 +314,14 @@ async function resolveGitPackage(
   };
 }
 
-function buildCloneDirName(target: PackageTarget): string {
+function buildCloneDirName(target: PackageTarget, sparsePatterns: string[] = []): string {
   const pathSegments = target.packageName.split(/[/:]/).filter(Boolean);
   const lastPathSegment = pathSegments.at(-1);
   const baseName = lastPathSegment?.replace(/\.git$/, '')?.replace(/[^\w.-]+/g, '-') ?? 'repo';
+  const patternsFingerprint = [...sparsePatterns].sort().join('\0');
   const digest = crypto
     .createHash('sha1')
-    .update(`${target.packageName}@${target.requestedVersion ?? ''}`)
+    .update(`${target.packageName}@${target.requestedVersion ?? ''}\0${patternsFingerprint}`)
     .digest('hex')
     .slice(0, 12);
   return `${baseName}-${digest}`;
