@@ -1,7 +1,11 @@
 /* eslint-disable no-console */
 import path from 'node:path';
 
-import { searchAndLoadFiledistConfig, loadFiledistConfigFile } from '../package/config';
+import {
+  searchAndLoadFiledistConfig,
+  loadFiledistConfigFile,
+  upsertFiledistConfigEntries,
+} from '../package/config';
 import { FiledistConfig } from '../types';
 
 import { printUsage, printVersion } from './usage';
@@ -11,6 +15,7 @@ import { runList } from './actions/list';
 import { runPurge } from './actions/purge';
 import { runInit } from './actions/init';
 import { runPresets } from './actions/presets';
+import { parseArgv, buildEntriesFromArgv } from './argv';
 
 const KNOWN_COMMANDS = new Set(['extract', 'check', 'list', 'purge', 'init', 'presets']);
 
@@ -54,27 +59,18 @@ export async function cli(argv: string[], cwd?: string, configSearchCwd?: string
   const effectiveCwd = cwd ?? process.cwd();
   const effectiveConfigSearchCwd = configSearchCwd ?? effectiveCwd;
 
-  // Detect --config from full args (works regardless of position relative to command)
-  const configFlagIdx = args.indexOf('--config');
-  const configFilePath =
-    configFlagIdx !== -1 && configFlagIdx + 1 < args.length
-      ? args[configFlagIdx + 1]
-      : // eslint-disable-next-line no-undefined
-        undefined;
-
-  // Load config from cwd, unless --packages is specified (CLI-only mode)
+  const ignoreConfig = args.includes('--no-save') || args.includes('--no-save=true');
   const packagesSpecified = args.includes('--packages');
 
   try {
-    let config: Awaited<ReturnType<typeof searchAndLoadFiledistConfig>>;
-    if (configFilePath) {
-      config = await loadFiledistConfigFile(path.resolve(effectiveCwd, configFilePath));
-    } else if (packagesSpecified) {
-      // eslint-disable-next-line unicorn/no-null
-      config = null;
-    } else {
-      config = await searchAndLoadFiledistConfig(effectiveConfigSearchCwd);
-    }
+    const config = await resolveConfig(
+      args,
+      cmdArgs,
+      effectiveCwd,
+      effectiveConfigSearchCwd,
+      ignoreConfig,
+      packagesSpecified,
+    );
 
     await dispatch(action, config, cmdArgs, effectiveCwd);
     return 0;
@@ -82,6 +78,43 @@ export async function cli(argv: string[], cwd?: string, configSearchCwd?: string
     console.error((error as Error).message);
     return 1;
   }
+}
+
+async function resolveConfig(
+  args: string[],
+  cmdArgs: string[],
+  effectiveCwd: string,
+  effectiveConfigSearchCwd: string,
+  ignoreConfig: boolean,
+  packagesSpecified: boolean,
+): Promise<FiledistConfig | null> {
+  const configFlagIdx = args.indexOf('--config');
+  const configFilePath =
+    configFlagIdx !== -1 && configFlagIdx + 1 < args.length
+      ? args[configFlagIdx + 1]
+      : // eslint-disable-next-line no-undefined
+        undefined;
+
+  let config: FiledistConfig | null;
+  if (configFilePath) {
+    config = await loadFiledistConfigFile(path.resolve(effectiveCwd, configFilePath));
+  } else if (ignoreConfig) {
+    // eslint-disable-next-line unicorn/no-null
+    config = null;
+  } else {
+    config = await searchAndLoadFiledistConfig(effectiveConfigSearchCwd);
+  }
+
+  // When --packages is specified, persist the entries to .filedistrc.yml
+  if (packagesSpecified && !ignoreConfig) {
+    const parsed = parseArgv(cmdArgs);
+    const entries = buildEntriesFromArgv(parsed);
+    if (entries && entries.length > 0) {
+      await upsertFiledistConfigEntries(effectiveCwd, entries);
+    }
+  }
+
+  return config;
 }
 
 async function dispatch(

@@ -24,6 +24,34 @@ npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --out
 
 Package specs support optional source prefixes. Use `git:` for git repositories and `npm:` when you want to make the npm source explicit. When no prefix is present, filedist treats the spec as npm. Git specs accept full repository URLs and host/path shorthands such as `git:github.com/org/repo.git@ref`.
 
+#### Auto-save to `.filedistrc.yml`
+
+Whenever `--packages` is used, filedist automatically creates or updates a `.filedistrc.yml` file in the current directory with the packages and selectors from that run. This means subsequent updates can be done with a single command — no flags needed:
+
+```sh
+# First run: extract and save to .filedistrc.yml automatically
+npx filedist extract --packages my-shared-assets@^2.0.0 --output ./data
+
+# .filedistrc.yml is now created:
+# sets:
+#   - package: my-shared-assets@^2.0.0
+#     output:
+#       path: ./data
+
+# Future bumps: just run extract (reads .filedistrc.yml)
+npx filedist extract
+
+# Or bump to a newer version
+npx filedist extract --packages my-shared-assets@^3.0.0 --output ./data
+# .filedistrc.yml is updated in place (same entry, new version)
+```
+
+If the entry already exists in `.filedistrc.yml` with identical content, the file is left unchanged. Use `--no-save` to run a one-off extraction without reading or updating `.filedistrc.yml`:
+
+```sh
+npx filedist extract --packages my-shared-assets@^2.0.0 --output ./tmp --no-save
+```
+
 ### Pattern 2 — Data packages with embedded configuration
 
 Create a dedicated npm package whose `package.json` declares an `filedist` config block. That config encodes the extraction sources, output directories, filtering rules, and any combination of upstream packages. Consumers install the data package and run its bundled script — they don't need to know the internals.
@@ -520,6 +548,10 @@ Extract options:
   --upgrade                Reinstall the package even if already present
   --silent                 Print only the final result line, suppressing per-file output
   --verbose, -v            Print detailed progress information for each step
+  --no-save                Skip loading and updating the local .filedistrc.yml config file.
+                           By default, when --packages is provided the run is saved to
+                           .filedistrc.yml so future `filedist extract` calls (without
+                           --packages) reuse the same config automatically.
 
 Check options:
   --packages <specs>       Same format as extract.

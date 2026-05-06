@@ -1,6 +1,10 @@
-import { cosmiconfig } from 'cosmiconfig';
+import fs from 'node:fs';
+import path from 'node:path';
 
-import { FiledistConfig } from '../types';
+import { cosmiconfig } from 'cosmiconfig';
+import yaml from 'js-yaml';
+
+import { FiledistConfig, FiledistExtractEntry } from '../types';
 
 type RawFiledistConfig = FiledistConfig & {
   postExtractCmd?: unknown;
@@ -116,4 +120,61 @@ export async function loadFiledistConfigFromDirectory(
 
   // eslint-disable-next-line unicorn/no-null
   return null;
+}
+
+const RC_FILENAME = '.filedistrc.yml';
+
+/**
+ * Upsert entries into `.filedistrc.yml` in the given directory.
+ * - Reads the existing file (or starts with an empty sets array).
+ * - For each provided entry, replaces an existing entry with the same `package`
+ *   value, or appends it when no match is found.
+ * - Writes the merged result back as YAML.
+ */
+export async function upsertFiledistConfigEntries(
+  directory: string,
+  addEntries: FiledistExtractEntry[],
+): Promise<void> {
+  const filePath = path.join(directory, RC_FILENAME);
+
+  // Read and parse existing config, or start fresh
+  let existing: { sets: FiledistExtractEntry[] } = { sets: [] };
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = yaml.load(raw) as { sets?: FiledistExtractEntry[] } | null;
+    if (parsed && Array.isArray(parsed.sets)) {
+      existing = { sets: parsed.sets };
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  // Upsert each entry by package name
+  let changed = false;
+  for (const addEntry of addEntries) {
+    const idx = existing.sets.findIndex((e) => e.package === addEntry.package);
+    // Build a minimal entry: omit output and selector when they are empty objects
+    const entryToSave: FiledistExtractEntry = { package: addEntry.package };
+    if (addEntry.selector && Object.keys(addEntry.selector).length > 0) {
+      entryToSave.selector = addEntry.selector;
+    }
+    if (addEntry.output && Object.keys(addEntry.output).length > 0) {
+      entryToSave.output = addEntry.output;
+    }
+    if (idx !== -1) {
+      // Only replace when the entry content differs
+      if (JSON.stringify(existing.sets[idx]) !== JSON.stringify(entryToSave)) {
+        existing.sets[idx] = entryToSave;
+        changed = true;
+      }
+    } else {
+      existing.sets.push(entryToSave);
+      changed = true;
+    }
+  }
+
+  if (!changed) return;
+  fs.writeFileSync(filePath, yaml.dump(existing, { indent: 2 }), 'utf8');
 }

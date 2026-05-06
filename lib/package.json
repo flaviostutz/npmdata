@@ -31,6 +31,7 @@
     "@tsconfig/node20": "^20.1.4",
     "@types/archiver": "^6.0.2",
     "@types/jest": "^29.4.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.14.8",
     "@types/semver": "^7.7.1",
     "archiver": "^6.0.2",
@@ -43,6 +44,7 @@
   "dependencies": {
     "cosmiconfig": "^9.0.1",
     "ignore": "^7.0.5",
+    "js-yaml": "^4.1.1",
     "minimatch": "^10.2.2",
     "mypkg": "^1.0.0",
     "package-manager-detector": "^1.6.0",

@@ -32,6 +32,8 @@ export type ParsedArgv = {
   upgrade?: boolean;
   silent?: boolean;
   verbose?: boolean;
+  /** --no-save: skip saving config to .filedistrc.yml */
+  ignoreConfig?: boolean;
 };
 
 export function resolveEffectivePresets(
@@ -137,6 +139,7 @@ export function parseArgv(argv: string[]): ParsedArgv {
     upgrade: getBoolFlag('--upgrade'),
     silent: getBoolFlag('--silent'),
     verbose: argv.includes('-v') ? true : verboseFlag,
+    ignoreConfig: getBoolFlag('--no-save'),
   };
 }
 
