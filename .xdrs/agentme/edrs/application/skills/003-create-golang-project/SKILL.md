@@ -12,9 +12,9 @@ compatibility: Go 1.21+
 
 ## Overview
 
-Creates a complete Go CLI project from scratch, following the layout from [agentme-edr-010](../../010-golang-project-tooling.md). Business logic lives in named feature packages; CLI wiring lives in `cli/<feature>/`; `main.go` is a thin dispatcher. The project builds cross-platform static binaries via a Makefile.
+Creates a complete Go CLI project from scratch, following the layout from [agentme-edr-010](../../010-golang-project-tooling.md). Business logic lives in named feature packages; CLI wiring lives in `cli/<feature>/`; `main.go` is a thin dispatcher. The module root owns its `Makefile`, `README.md`, `dist/`, and `.cache/` folders.
 
-Related EDR: [agentme-edr-010](../../010-golang-project-tooling.md)
+Related EDRs: [agentme-edr-010](../../010-golang-project-tooling.md), [agentme-edr-016](../../../principles/016-cross-language-module-structure.md)
 
 ## Instructions
 
@@ -34,6 +34,16 @@ Ask for (or infer from context):
 ---
 
 ### Phase 2: Create root files
+
+**`./.mise.toml`** (replace `[go-version]` and `[golangci-lint-version]`):
+
+```toml
+[tools]
+go = "[go-version]"
+golangci-lint = "[golangci-lint-version]"
+```
+
+Pin any additional project CLIs used by the Makefile here as well. Use an explicit `golangci-lint` version rather than `latest`.
 
 **`go.mod`** (replace `[module]`, `[go-version]`):
 
@@ -81,14 +91,24 @@ func main() {
 
 ```makefile
 SHELL := /bin/bash
+MISE := mise exec --
 
 BINARY := [binary]
+CACHE_DIR := .cache
+export GOCACHE := $(abspath $(CACHE_DIR)/go-build)
+export GOMODCACHE := $(abspath $(CACHE_DIR)/go-mod)
+export GOLANGCI_LINT_CACHE := $(abspath $(CACHE_DIR)/golangci-lint)
 
 all: build lint test
 
+setup:
+	mise install
+	$(MAKE) install
+
 build: install
 	@mkdir -p dist
-	go build -o dist/$(BINARY) .
+	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	$(MISE) go build -o dist/$(BINARY) .
 
 build-all: build-arch-os-darwin-amd64 build-arch-os-darwin-arm64 build-arch-os-linux-amd64 build-arch-os-linux-arm64 build-arch-os-windows-amd64
 	@echo "All platform builds complete"
@@ -113,35 +133,37 @@ build-arch-os:
 	@if [ "${ARCH}" == "" ]; then echo "ENV ARCH is required"; exit 1; fi
 	@echo "Compiling $(BINARY) for ${OS}-${ARCH}..."
 	@mkdir -p dist/${OS}-${ARCH}
-	go mod download
-	GOOS=${OS} GOARCH=${ARCH} CGO_ENABLED=0 go build -a -o dist/${OS}-${ARCH}/$(BINARY) .
+	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	$(MISE) go mod download
+	GOOS=${OS} GOARCH=${ARCH} CGO_ENABLED=0 $(MISE) go build -a -o dist/${OS}-${ARCH}/$(BINARY) .
 	@echo "Done"
 
 install:
-	go mod download
+	$(MISE) go mod download
 
 lint:
-	golangci-lint run ./...
+	$(MISE) golangci-lint run ./...
 
 lint-fix:
-	golangci-lint run --fix ./...
+	$(MISE) golangci-lint run --fix ./...
 
 test:
-	go test -cover ./...
+	$(MISE) go test -cover ./...
 
 test-coverage:
-	go test -coverprofile=coverage.out ./...
-	go tool cover -func coverage.out
+	@mkdir -p $(CACHE_DIR)
+	$(MISE) go test -coverprofile=$(CACHE_DIR)/coverage.out ./...
+	$(MISE) go tool cover -func $(CACHE_DIR)/coverage.out
 
 benchmark:
-	go test -bench . -benchmem -count 5 ./...
+	$(MISE) go test -bench . -benchmem -count 5 ./...
 
 clean:
 	rm -rf dist
-	rm -f coverage.out
+	rm -rf .cache
 
 start:
-	go run ./ [subcommand]
+	$(MISE) go run ./ [subcommand]
 ```
 
 **`.golangci.yml`**:
@@ -164,6 +186,7 @@ run:
 
 ```
 dist/
+.cache/
 coverage.out
 *.pprof
 .DS_Store
@@ -182,10 +205,11 @@ coverage.out
 
 ## Development
 
-    make build    # compile binary to dist/
-    make lint     # run golangci-lint
-    make test     # run tests with coverage
-    make start    # run locally with default args
+	make setup
+	make build    # compile binary to dist/
+	make lint     # run golangci-lint with cache in .cache/
+	make test     # run tests with coverage artifacts in .cache/
+	make start    # run locally with default args
 ```
 
 ---
@@ -292,7 +316,7 @@ func Run(args []string) {
 After creating all files, run the following in the project root:
 
 ```bash
-go mod tidy
+make setup
 make all
 ```
 
@@ -306,6 +330,8 @@ Fix any compile or lint errors before finishing.
 - Business logic only in `[feature]/` packages — no flag parsing, no `fmt.Println` for diagnostics.
 - `cli/[feature]/` owns flags, output, and calls domain. No logic here beyond reading flags and printing results.
 - All tests co-located (`*_test.go` next to the file under test).
+- Use `tests_integration/` for integration flows and `tests_benchmark/` when benchmarks need dedicated harnesses or datasets.
 - Log with `logrus`; never use `fmt.Println` for diagnostic/debug output.
-- All development tasks go through `make` targets — never run `go` directly for routine ops.
+- All development tasks go through `make` targets. The Makefile recipes call `mise exec -- go ...` and related tools directly.
 - Do not create an `internal/` package unless explicitly justified (importability is preferred).
+- If the project is a reusable library, place consumer examples in a sibling `examples/` folder outside the module root and keep them on the public module import path.

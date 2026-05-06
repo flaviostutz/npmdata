@@ -14,11 +14,11 @@ metadata:
 ## Overview
 
 Creates or extends a monorepo that follows the standard layout from [agentme-edr-005](../../005-monorepo-structure.md):
-top-level application folders, a shared library area, Mise-managed tooling, and Makefiles at every
-level so any contributor can build, lint, and test any part of the monorepo with a single,
-predictable command.
+top-level application folders, independent module roots, sibling example and multi-module test
+areas, Mise-managed tooling, and Makefiles at every level so any contributor can build, lint, and
+test any part of the monorepo with a single, predictable command.
 
-Related EDR: [agentme-edr-005](../../005-monorepo-structure.md)
+Related EDRs: [agentme-edr-005](../../005-monorepo-structure.md), [agentme-edr-013](../../../governance/013-contributing-guide-requirements.md), [agentme-edr-016](../../../principles/016-cross-language-module-structure.md)
 
 ## Instructions
 
@@ -51,9 +51,11 @@ golangci-lint = "1.57"
 Coordinates `build`, `lint`, and `test` across all applications. Also exposes a `setup` target.
 
 ```makefile
-.PHONY: build lint test setup
+.PHONY: all build lint test clean setup
 
 APPS := <app1> <app2>   # replace with actual application names
+
+all: build lint test
 
 build:
 	$(foreach app,$(APPS),$(MAKE) -C $(app) build &&) true
@@ -64,10 +66,23 @@ lint:
 test:
 	$(foreach app,$(APPS),$(MAKE) -C $(app) test &&) true
 
+clean:
+   $(foreach app,$(APPS),$(MAKE) -C $(app) clean &&) true
+   rm -rf .cache
+
 setup:
 	@echo "Install Mise: https://mise.jdx.dev/getting-started.html"
 	@echo "Then run: mise install"
 	@echo "See README.md for full setup instructions."
+```
+
+#### Root `.gitignore`
+
+Must ignore shared artifact and cache folders:
+
+```gitignore
+dist/
+.cache/
 ```
 
 #### Root `README.md`
@@ -94,6 +109,29 @@ Must include four sections:
 | `shared/`           | Libraries and scripts shared across all apps |
 | `<app1>/`           | <Short description of app1>        |
 | `<app2>/`           | <Short description of app2>        |
+```
+
+#### Root `CONTRIBUTING.md`
+
+Must explain the contribution workflow in a short, explicit way.
+
+```markdown
+# Contributing
+
+## Bugs
+Report bugs in GitHub issues with steps to reproduce, expected behavior, and actual behavior.
+
+## Features
+Discuss feature ideas in an issue before opening a pull request so scope and approach can be agreed first.
+
+## Pull requests
+Submit fixes and features through pull requests from feature branches targeting `main`.
+
+## Review etiquette
+Use [Conventional Comments](https://conventionalcomments.org/) in review feedback.
+
+## Keep changes focused
+Keep pull requests small and focused enough that review and discussion stay efficient.
 ```
 
 ---
@@ -139,9 +177,11 @@ For each application:
 3. **Create `<app>/Makefile`** that delegates to each module:
 
    ```makefile
-   .PHONY: build lint test
+   .PHONY: all build lint test clean
 
    MODULES := <module1> <module2>   # replace with actual module names
+
+   all: build lint test
 
    build:
    	$(foreach mod,$(MODULES),$(MAKE) -C $(mod) build &&) true
@@ -151,9 +191,15 @@ For each application:
 
    test:
    	$(foreach mod,$(MODULES),$(MAKE) -C $(mod) test &&) true
+
+   clean:
+   	$(foreach mod,$(MODULES),$(MAKE) -C $(mod) clean &&) true
+   	rm -rf .cache
    ```
 
 4. **Create `<app>/shared/`** — leave empty if no cross-module shared code exists yet.
+
+5. **Create sibling aggregation folders when needed**: `<app>/examples/`, `<app>/tests_integration/`, and `<app>/tests_benchmark/` for artifacts that apply to multiple modules.
 
 ---
 
@@ -163,51 +209,70 @@ For each module inside an application:
 
 1. **Create the module folder** using lowercase, hyphen-separated names (e.g., `data-loader`).
 
-2. **Create `<app>/<module>/Makefile`** with the three required targets, adapted to the module's language:
+2. **Create `<app>/<module>/README.md`** with consumer usage first and short developer commands at the end.
+
+3. **Create `<app>/<module>/Makefile`** with the common targets, adapted to the module's language. Redirect persistent caches into `.cache/` and write distributable artifacts to `dist/`.
 
    **Go:**
    ```makefile
-   .PHONY: build lint test
+   .PHONY: all build lint test clean
+
+   all: build lint test
 
    build:
-   	go build ./...
+   mise exec -- go build ./...
 
    lint:
-   	golangci-lint run ./...
+   mise exec -- golangci-lint run ./...
 
    test:
-   	go test ./... -cover
+   mise exec -- go test ./... -cover
+
+   clean:
+	rm -rf dist .cache
    ```
 
    **Node.js / TypeScript:**
    ```makefile
-   .PHONY: build lint test
+   .PHONY: all build lint test clean
+
+   all: build lint test
 
    build:
-   	npm run build
+   mise exec -- pnpm exec tsc --project tsconfig.json
 
    lint:
-   	npm run lint
+   mise exec -- pnpm exec eslint ./src
 
    test:
-   	npm test
+   mise exec -- pnpm exec jest --verbose
+
+   clean:
+	rm -rf dist .cache
    ```
 
    **Python:**
    ```makefile
-   .PHONY: build lint test
+   .PHONY: all build lint test clean
+
+   all: build lint test
 
    build:
-   	pip install -e .
+   mise exec -- uv build --project . --out-dir dist
 
    lint:
-   	ruff check .
+   mise exec -- uv run --project . ruff check .
 
    test:
-   	pytest
+   mise exec -- uv run --project . pytest
+
+   clean:
+	rm -rf dist .cache
    ```
 
-3. **Add source files** appropriate to the language, placing them inside the module folder.
+4. **Add source files** appropriate to the language, placing them inside the module folder.
+
+5. **Place module-specific integration tests and benchmarks predictably**: `<module>/tests_integration/` and `<module>/tests_benchmark/` when they are not co-located by language convention.
 
 ---
 
@@ -219,7 +284,10 @@ After scaffolding, run the following checks and fix any issues:
 - `make lint` at the repository root passes.
 - `make test` at the repository root passes.
 - All folder and file names are lowercase and use hyphens.
+- The root `.gitignore` ignores `dist/` and `.cache/`.
+- A `CONTRIBUTING.md` exists at the repository root and covers bugs, feature discussions, pull requests, Conventional Comments, and small focused changes.
 - Every application folder has a `README.md` covering all four required sections.
+- Every module folder has a `README.md`, `Makefile`, `dist/` location, and `.cache/` strategy.
 - A `.mise.toml` exists at the repository root with all required tool versions pinned.
 
 ---
@@ -232,8 +300,10 @@ After scaffolding, run the following checks and fix any issues:
 pcb-devices/
 ├── README.md
 ├── Makefile
+├── examples/
 ├── shared/
 └── firmware/
+   ├── README.md
     └── Makefile
 ```
 
@@ -267,4 +337,4 @@ test:
 - **Cross-application dependency requested:** Refuse and suggest publishing the shared code as a library in `shared/libs/` instead.
 - **Module with no compilable output (e.g., pure scripts):** Still create the Makefile; `build` can be a no-op (`@true`) but the target must exist.
 - **Language not listed above:** Mirror the pattern — `build` produces an artifact, `lint` runs static analysis, `test` runs tests. Adapt commands to the actual toolchain.
-- **Existing files:** Never overwrite existing `README.md` or `Makefile` files without user confirmation. Diff and propose additions instead.
+- **Existing files:** Never overwrite existing `README.md`, `CONTRIBUTING.md`, or `Makefile` files without user confirmation. Diff and propose additions instead.

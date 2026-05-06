@@ -6,37 +6,22 @@ This index points to all type- and scope-specific XDR indexes. XDRs (Decision Re
 
 XDRs in scopes listed last override the ones listed first
 
-### ADRs - general
+### _core
 
-General architectural decisions covering cross-business standards and practices.
+XDR framework standards — how decision records, skills, research, articles, and plans are structured, written, versioned, and discovered.
 
-[View general ADRs Index](_general/adrs/index.md)
-
-### EDRs - general
-
-General engineering decisions covering cross-business standards and practices.
-
-[View general EDRs Index](_general/edrs/index.md)
+[View _core Scope Overview](_core/index.md)
 
 ---
 
-### BDRs - _local
+### agentme
 
-Project-local business decisions specific to this repository. Always listed last so its decisions override or extend all higher-level business scopes.
+Curated library of XDRs and skills encoding best practices for AI coding agents.
 
-[View _local BDRs Index](_local/bdrs/index.md)
-
----
-
-### EDRs - agentkit
-
-[View agentkit EDRs Index](agentkit/edrs/index.md)
+[View agentme Scope Overview](agentme/index.md)
 
 ---
 
-### EDRs - _local
+### _local (reserved)
 
-Project-local engineering decisions specific to this repository. Always listed last so its decisions override or extend all scopes above.
-
-[View _local EDRs Index](_local/edrs/index.md)
-
+Project-local XDRs that must not be shared with other contexts. Always keep this scope last so its decisions override or extend all scopes listed above. Keep `_local` canonical indexes in the workspace tree only; do not link them from this shared index. Readers and tools should still try to discover existing `_local` indexes in the current workspace by default. Documents in non-`_local` scopes must never link into `_local`; only `_local` documents may link to other `_local` documents.

@@ -1,3 +1,8 @@
+---
+name: agentme-edr-002-coding-best-practices
+description: Defines cross-language coding practices for keeping code readable, modular, and synchronized with tests and documentation. Apply across projects adopting agentme engineering standards.
+---
+
 # agentme-edr-002: Coding best practices
 
 ## Context and Problem Statement
@@ -12,7 +17,7 @@ What coding practices should be followed across all languages and projects to ke
 
 ### Implementation Details
 
-#### 1. Keep files short — split at 400 lines
+#### 01-keep-files-short
 
 A file must not exceed **400 lines**. When a file grows beyond this limit, split related functions or types into separate, focused modules.
 
@@ -39,7 +44,7 @@ src/
 
 ---
 
-#### 2. Apply the Template Method pattern for large multi-section functions
+#### 02-apply-template-method-pattern
 
 When a function's main logic contains well-defined sections and **any individual section exceeds ~20 lines**, extract each section into its own named function. The outer function becomes an orchestrator that calls the extracted helpers in sequence.
 
@@ -76,7 +81,7 @@ def _persist_order(order, total): ...
 
 ---
 
-#### 3. Keep README, tests, and examples in sync with implementation
+#### 03-keep-readme-tests-and-examples-in-sync
 
 Every change to a public interface, behavior, or configuration option must be reflected in:
 
@@ -88,7 +93,7 @@ Every change to a public interface, behavior, or configuration option must be re
 
 ---
 
-#### 4. Declare types in the file where they are used — unless shared
+#### 04-declare-types-in-file-where-used
 
 If a type (struct, interface, class, typedef, etc.) is used in only **one** file, declare it in that same file. Move a type to a shared module only when it is referenced in two or more files.
 
@@ -96,7 +101,7 @@ If a type (struct, interface, class, typedef, etc.) is used in only **one** file
 
 ---
 
-#### 5. Keep test files next to the files they test
+#### 05-keep-test-files-next-to-source
 
 Where the language ecosystem supports it (e.g. JavaScript/TypeScript, Go, Rust), place test files **beside** the source file they cover and use a consistent naming convention rather than mirroring the source tree in a separate `tests/` folder.
 

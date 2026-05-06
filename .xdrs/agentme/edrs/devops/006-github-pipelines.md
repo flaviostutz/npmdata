@@ -1,3 +1,8 @@
+---
+name: agentme-edr-006-github-ci-cd-pipelines
+description: Defines the standard GitHub Actions workflow split for CI, release tagging, and publishing. Use when configuring project automation.
+---
+
 # agentme-edr-006: GitHub CI/CD pipelines
 
 ## Context and Problem Statement
@@ -26,7 +31,9 @@ All workflows run on `ubuntu-latest`. Tool versions MUST be managed by Mise via 
 
 ---
 
-#### 1. CI workflow — `.github/workflows/ci.yml`
+#### 01-ci-workflow
+
+File: `.github/workflows/ci.yml`
 
 Triggered on every PR targeting `main` and every push to `main`. Runs the standard `build`, `lint`, and `test` targets from the root Makefile and fails the workflow if any step exits non-zero.
 
@@ -54,7 +61,9 @@ jobs:
 
 ---
 
-#### 2. Release workflow — `.github/workflows/release.yml`
+#### 02-release-workflow
+
+File: `.github/workflows/release.yml`
 
 Manually dispatched (`workflow_dispatch`). Calculates the next semantic version tag using **monotag** and pushes that tag to the repository. Pushing the tag then automatically triggers the publish workflow.
 
@@ -97,7 +106,9 @@ jobs:
 
 ---
 
-#### 3. Publish workflow — `.github/workflows/publish.yml`
+#### 03-publish-workflow
+
+File: `.github/workflows/publish.yml`
 
 Triggered exclusively when a tag matching `v*.*.*` is pushed to the repository. This ensures only explicitly tagged commits produce published artifacts. Runs `make publish` against the tagged commit.
 
@@ -129,7 +140,7 @@ jobs:
 
 *Why rebuild on publish:* The checkout is done from the exact tag commit. Rebuilding ensures the published artifact matches exactly what is tagged, rather than relying on a prior CI artifact.
 
-*Why `id-token: write`:* Required for npm provenance attestation via `npm publish --provenance`, as specified in [agentme-edr-003](003-javascript-project-tooling.md).
+*Why `id-token: write`:* Required for npm provenance attestation via `npm publish --provenance`, as specified in [agentme-edr-003](../application/003-javascript-project-tooling.md).
 
 ---
 
