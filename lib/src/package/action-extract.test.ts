@@ -401,8 +401,7 @@ describe('actionExtract', () => {
     expect(result.added).toBe(2);
     expect(fs.existsSync(path.join(outputDir, 'docs', 'guide.md'))).toBe(true);
     expect(fs.existsSync(path.join(outputDir, 'nested', 'child', 'data.json'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, '.filedist-tmp'))).toBe(false);
-    expect(fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf8')).toContain('.filedist-tmp');
+    // git clone temp dir is in the OS temp dir, not in the workspace
 
     const parentMarker = await readMarker(path.join(outputDir, MARKER_FILE));
     const childMarker = await readMarker(path.join(outputDir, 'nested', MARKER_FILE));

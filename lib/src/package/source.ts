@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { FiledistExtractEntry } from '../types';
@@ -72,18 +73,16 @@ export function parsePackageTarget(spec: string): PackageTarget {
 export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime {
   const packageCache = new Map<string, ResolvedPackageSource>();
   const cloneDirs = new Set<string>();
-  const tempRoot = path.join(cwd, '.filedist-tmp');
+  let tempRoot = '';
 
-  const ensureTempRoot = (): void => {
-    if (!fs.existsSync(tempRoot)) {
-      fs.mkdirSync(tempRoot, { recursive: true });
+  const ensureTempRoot = (): string => {
+    if (!tempRoot) {
+      tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'filedist-git-'));
       if (verbose) {
-        console.log(
-          `[verbose] source: created temp git directory ${formatDisplayPath(tempRoot, cwd)}`,
-        );
+        console.log(`[verbose] source: using temp git directory ${tempRoot}`);
       }
     }
-    ensureGitignoreContains(cwd, '.filedist-tmp');
+    return tempRoot;
   };
 
   return {
@@ -107,7 +106,7 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
 
       const resolved =
         target.source === 'git'
-          ? resolveGitPackage(target, cwd, tempRoot, ensureTempRoot, verbose, sparsePatterns)
+          ? resolveGitPackage(target, cwd, ensureTempRoot, verbose, sparsePatterns)
           : resolveNpmPackage(target, upgrade, cwd, verbose);
 
       const packageSource = await resolved;
@@ -143,11 +142,9 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
       }
       cloneDirs.clear();
 
-      if (fs.existsSync(tempRoot)) {
+      if (tempRoot && fs.existsSync(tempRoot)) {
         try {
-          if (fs.readdirSync(tempRoot).length === 0) {
-            fs.rmdirSync(tempRoot);
-          }
+          fs.rmSync(tempRoot, { recursive: true, force: true });
         } catch {
           // ignore cleanup failures
         }
@@ -256,12 +253,11 @@ async function resolveNpmPackage(
 async function resolveGitPackage(
   target: PackageTarget,
   cwd: string,
-  tempRoot: string,
-  ensureTempRoot: () => void,
+  ensureTempRoot: () => string,
   verbose: boolean,
   sparsePatterns: string[] = [],
 ): Promise<ResolvedPackageSource> {
-  ensureTempRoot();
+  const tempRoot = ensureTempRoot();
 
   const cloneDir = path.join(tempRoot, buildCloneDirName(target, sparsePatterns));
   if (fs.existsSync(cloneDir)) {
@@ -331,20 +327,4 @@ function buildCloneDirName(target: PackageTarget, sparsePatterns: string[] = [])
     .digest('hex')
     .slice(0, 12);
   return `${baseName}-${digest}`;
-}
-
-function ensureGitignoreContains(cwd: string, entry: string): void {
-  const gitignorePath = path.join(cwd, '.gitignore');
-  if (!fs.existsSync(gitignorePath)) {
-    fs.writeFileSync(gitignorePath, `${entry}\n`);
-    return;
-  }
-
-  const lines = fs
-    .readFileSync(gitignorePath, 'utf8')
-    .split(/\r?\n/)
-    .map((line) => line.trim());
-  if (!lines.includes(entry)) {
-    fs.appendFileSync(gitignorePath, `\n${entry}\n`);
-  }
 }
