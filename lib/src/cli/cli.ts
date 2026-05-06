@@ -105,12 +105,23 @@ async function resolveConfig(
     config = await searchAndLoadFiledistConfig(effectiveConfigSearchCwd);
   }
 
-  // When --packages is specified, persist the entries to .filedistrc.yml
+  // When --packages is specified, persist the entries to the config file (yml only)
   if (packagesSpecified && !ignoreConfig) {
     const parsed = parseArgv(cmdArgs);
     const entries = buildEntriesFromArgv(parsed);
     if (entries && entries.length > 0) {
-      await upsertFiledistConfigEntries(effectiveCwd, entries);
+      // eslint-disable-next-line no-undefined
+      const saveTarget = configFilePath ? path.resolve(effectiveCwd, configFilePath) : undefined;
+      const targetPath = saveTarget ?? path.join(effectiveCwd, '.filedistrc.yml');
+      const isYml = targetPath.endsWith('.yml') || targetPath.endsWith('.yaml');
+      if (isYml) {
+        if (parsed.verbose) {
+          console.log(`[verbose] Auto-saving packages to config file: ${targetPath}`);
+        }
+        await upsertFiledistConfigEntries(effectiveCwd, entries, saveTarget);
+      } else if (parsed.verbose) {
+        console.log(`[verbose] Skipping auto-save: config file is not a YAML file (${targetPath})`);
+      }
     }
   }
 

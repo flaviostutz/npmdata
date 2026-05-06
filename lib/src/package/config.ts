@@ -125,7 +125,8 @@ export async function loadFiledistConfigFromDirectory(
 const RC_FILENAME = '.filedistrc.yml';
 
 /**
- * Upsert entries into `.filedistrc.yml` in the given directory.
+ * Upsert entries into a filedist YAML config file.
+ * - Uses the path provided (from --config) or defaults to `.filedistrc.yml` in `directory`.
  * - Reads the existing file (or starts with an empty sets array).
  * - For each provided entry, replaces an existing entry with the same `package`
  *   value, or appends it when no match is found.
@@ -134,8 +135,9 @@ const RC_FILENAME = '.filedistrc.yml';
 export async function upsertFiledistConfigEntries(
   directory: string,
   addEntries: FiledistExtractEntry[],
+  configFilePath?: string,
 ): Promise<void> {
-  const filePath = path.join(directory, RC_FILENAME);
+  const filePath = configFilePath ?? path.join(directory, RC_FILENAME);
 
   // Read and parse existing config, or start fresh
   let existing: { sets: FiledistExtractEntry[] } = { sets: [] };
