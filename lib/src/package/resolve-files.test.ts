@@ -583,4 +583,165 @@ describe('resolveFiles', () => {
     expect(events).toContain('package-start');
     expect(events).toContain('package-end');
   }, 60000);
+
+  it('resolves the same git repo twice with different sparse selector patterns independently', async () => {
+    const repo = await createMockGitRepo(
+      'git-sparse-multi',
+      {
+        'docs/guide.md': '# Guide',
+        'src/index.ts': 'export {}',
+        'config/app.json': '{}',
+      },
+      tmpDir,
+      { tag: 'v1.0.0' },
+    );
+
+    const outputDocs = path.join(tmpDir, 'output-docs');
+    const outputSrc = path.join(tmpDir, 'output-src');
+
+    const files = await resolveFiles(
+      [
+        {
+          package: `git:${repo.repoUrl}@v1.0.0`,
+          selector: { files: ['docs/**'] },
+          output: { path: outputDocs, gitignore: false },
+        },
+        {
+          package: `git:${repo.repoUrl}@v1.0.0`,
+          selector: { files: ['src/**'] },
+          output: { path: outputSrc, gitignore: false },
+        },
+      ],
+      { cwd: tmpDir },
+    );
+
+    // Each entry resolved with its own sparse patterns — no cross-contamination
+    const docFiles = files.filter((f) => f.outputDir === outputDocs).map((f) => f.relPath);
+    const srcFiles = files.filter((f) => f.outputDir === outputSrc).map((f) => f.relPath);
+
+    expect(docFiles).toEqual(['docs/guide.md']);
+    expect(srcFiles).toEqual(['src/index.ts']);
+  }, 60000);
+
+  it('two-pass sparse checkout: self-set with explicit patterns — only config first, then content', async () => {
+    // Repo has content in two dirs; the filedist self-set constrains to docs/** only.
+    // Phase 1 fetches only config files. Phase 2 expands to docs/** discovered from the
+    // self-set so those files are materialised before enumeratePackageFiles runs.
+    const repo = await createMockGitRepo(
+      'git-twopass-pattern',
+      {
+        'docs/guide.md': '# Guide',
+        'src/index.ts': 'export {}',
+      },
+      tmpDir,
+      {
+        tag: 'v1.0.0',
+        filedistConfig: {
+          sets: [{ selector: { files: ['docs/**'] }, output: { path: '.', gitignore: false } }],
+        },
+      },
+    );
+
+    const outputDir = path.join(tmpDir, 'output-twopass-pattern');
+    const files = await resolveFiles(
+      [
+        {
+          // No explicit selector — caller defers to the package's own config
+          package: `git:${repo.repoUrl}@v1.0.0`,
+          output: { path: outputDir, gitignore: false },
+        },
+      ],
+      { cwd: tmpDir },
+    );
+
+    const relPaths = files.map((f) => f.relPath);
+    expect(relPaths).toContain('docs/guide.md');
+    expect(relPaths).not.toContain('src/index.ts');
+  }, 60000);
+
+  it('two-pass sparse checkout: multiple sets — second set is self-pointing, no caller selector', async () => {
+    // Package has two sets: first is an external ref, second is a self-set with file patterns.
+    // Phase 1 fetches only config files. Phase 2 must expand to the self-set patterns
+    // (docs/**) so those files are materialised. src/index.ts must NOT be materialised
+    // because it is outside the self-set's patterns.
+    const externalRepo = await createMockGitRepo(
+      'git-twopass-external',
+      { 'lib/helper.ts': 'export const x = 1;' },
+      tmpDir,
+      { tag: 'ext-v1.0.0' },
+    );
+    const repo = await createMockGitRepo(
+      'git-twopass-second-self',
+      {
+        'docs/guide.md': '# Guide',
+        'src/index.ts': 'export {}',
+      },
+      tmpDir,
+      {
+        tag: 'v1.0.0',
+        filedistConfig: {
+          sets: [
+            // first set: external reference
+            {
+              package: `git:${externalRepo.repoUrl}@ext-v1.0.0`,
+              output: { path: 'from-ext', gitignore: false },
+            },
+            // second set: self-pointing with constrained file patterns
+            { selector: { files: ['docs/**'] }, output: { path: '.', gitignore: false } },
+          ],
+        },
+      },
+    );
+
+    const outputDir = path.join(tmpDir, 'output-twopass-second-self');
+    const files = await resolveFiles(
+      [
+        {
+          // No explicit selector — caller defers entirely to the package's own config
+          package: `git:${repo.repoUrl}@v1.0.0`,
+          output: { path: outputDir, gitignore: false },
+        },
+      ],
+      { cwd: tmpDir },
+    );
+
+    const selfFiles = files.filter((f) => f.packageName === repo.repoUrl).map((f) => f.relPath);
+    // Phase 2 should expand to docs/** from the second (self) set only
+    expect(selfFiles).toContain('docs/guide.md');
+    expect(selfFiles).not.toContain('src/index.ts');
+    // External package files should also be resolved
+    const extFiles = files
+      .filter((f) => f.packageName === externalRepo.repoUrl)
+      .map((f) => f.relPath);
+    expect(extFiles).toContain('lib/helper.ts');
+  }, 60000);
+
+  it('two-pass sparse checkout: no self-set config — phase 2 expands to all files', async () => {
+    // Repo has no filedist config at all. Phase 1 fetches only config files (none present),
+    // phase 2 must expand to ** so enumeratePackageFiles can discover all content.
+    const repo = await createMockGitRepo(
+      'git-twopass-noconfig',
+      {
+        'docs/guide.md': '# Guide',
+        'src/index.ts': 'export {}',
+      },
+      tmpDir,
+      { tag: 'v1.0.0' },
+    );
+
+    const outputDir = path.join(tmpDir, 'output-twopass-noconfig');
+    const files = await resolveFiles(
+      [
+        {
+          package: `git:${repo.repoUrl}@v1.0.0`,
+          output: { path: outputDir, gitignore: false },
+        },
+      ],
+      { cwd: tmpDir },
+    );
+
+    const relPaths = files.map((f) => f.relPath);
+    expect(relPaths).toContain('docs/guide.md');
+    expect(relPaths).toContain('src/index.ts');
+  }, 60000);
 });

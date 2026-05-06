@@ -22,6 +22,12 @@ export type ResolvedPackageSource = {
 
 export type SourceRuntime = {
   resolvePackage: (entry: FiledistExtractEntry, upgrade: boolean) => Promise<ResolvedPackageSource>;
+  /**
+   * Phase 2 sparse expansion: adds `patterns` to the sparse checkout of a previously
+   * cloned git package and runs `git checkout` to materialise the newly matched files.
+   * No-op when `patterns` is empty or the clone dir has no `.git` (e.g. npm package).
+   */
+  expandGitSparseCheckout: (packagePath: string, patterns: string[]) => void;
   cleanup: () => void;
 };
 
@@ -110,6 +116,24 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
         cloneDirs.add(packageSource.packagePath);
       }
       return packageSource;
+    },
+    expandGitSparseCheckout(packagePath: string, patterns: string[]): void {
+      if (patterns.length === 0) return;
+      const gitDir = path.join(packagePath, '.git');
+      if (!fs.existsSync(gitDir)) return;
+      if (verbose) {
+        console.log(
+          `[verbose] source: expanding sparse checkout at ${formatDisplayPath(packagePath, cwd)} with [${patterns.join(', ')}]`,
+        );
+      }
+      spawnWithLog(
+        'git',
+        ['-C', packagePath, 'sparse-checkout', 'set', '--no-cone', ...patterns],
+        cwd,
+        verbose,
+        true,
+      );
+      spawnWithLog('git', ['-C', packagePath, 'checkout'], cwd, verbose, true);
     },
     cleanup(): void {
       for (const cloneDir of cloneDirs) {
@@ -250,61 +274,43 @@ async function resolveGitPackage(
     );
   }
 
-  if (sparsePatterns.length > 0) {
-    // Sparse clone: fetch tree objects but defer blob downloads until checkout
-    spawnWithLog(
-      'git',
-      ['clone', '--filter=blob:none', '--no-checkout', '--sparse', target.repository!, cloneDir],
-      cwd,
-      verbose,
-      true,
-    );
+  // Phase 1: sparse clone — always fetch only config files + any explicit caller patterns.
+  // This lets us read nested filedist config before deciding which content files to fetch.
+  // .git is intentionally kept alive so phase 2 (expandGitSparseCheckout) can run later.
+  spawnWithLog(
+    'git',
+    ['clone', '--filter=blob:none', '--no-checkout', '--sparse', target.repository!, cloneDir],
+    cwd,
+    verbose,
+    true,
+  );
 
-    // Always include config file names so nested filedist config loading works
-    const configFilePatterns = [
-      'package.json',
-      '.filedistrc',
-      '.filedistrc.json',
-      '.filedistrc.yaml',
-      '.filedistrc.yml',
-      'filedist.config.js',
-      'filedist.config.cjs',
-    ];
-    const allPatterns = [...new Set([...configFilePatterns, ...sparsePatterns])];
-    spawnWithLog(
-      'git',
-      ['-C', cloneDir, 'sparse-checkout', 'set', '--no-cone', ...allPatterns],
-      cwd,
-      verbose,
-      true,
-    );
+  const configFilePatterns = [
+    'package.json',
+    '.filedistrc',
+    '.filedistrc.json',
+    '.filedistrc.yaml',
+    '.filedistrc.yml',
+    'filedist.config.js',
+    'filedist.config.cjs',
+  ];
+  const phase1Patterns = [...new Set([...configFilePatterns, ...sparsePatterns])];
+  spawnWithLog(
+    'git',
+    ['-C', cloneDir, 'sparse-checkout', 'set', '--no-cone', ...phase1Patterns],
+    cwd,
+    verbose,
+    true,
+  );
 
-    // Checkout the desired ref (or HEAD when no version is specified)
-    const checkoutArgs = target.requestedVersion
-      ? ['-C', cloneDir, 'checkout', target.requestedVersion]
-      : ['-C', cloneDir, 'checkout'];
-    spawnWithLog('git', checkoutArgs, cwd, verbose, true);
-  } else {
-    // No file patterns specified: perform a full clone
-    spawnWithLog('git', ['clone', target.repository!, cloneDir], cwd, verbose, true);
-    if (target.requestedVersion) {
-      spawnWithLog(
-        'git',
-        ['-C', cloneDir, 'checkout', target.requestedVersion],
-        cwd,
-        verbose,
-        true,
-      );
-    }
-  }
+  const checkoutRef = target.requestedVersion
+    ? ['-C', cloneDir, 'checkout', target.requestedVersion]
+    : ['-C', cloneDir, 'checkout'];
+  spawnWithLog('git', checkoutRef, cwd, verbose, true);
 
   const revision = spawnWithLog('git', ['-C', cloneDir, 'rev-parse', 'HEAD'], cwd, verbose, true)
     .stdout.toString()
     .trim();
-  const gitDir = path.join(cloneDir, '.git');
-  if (fs.existsSync(gitDir)) {
-    fs.rmSync(gitDir, { recursive: true, force: true });
-  }
 
   return {
     source: 'git',

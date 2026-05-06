@@ -202,6 +202,19 @@ async function resolveFilesInternal(
       const depConfig = await loadFiledistConfigFromDirectory(pkgPath);
       const pkgFiledistSets = depConfig?.sets;
 
+      // Phase 2 sparse expansion (git only, no explicit caller patterns):
+      // Phase 1 only fetched config files. Now that we've read the config, we know
+      // which content files are needed and can materialise them with a second sparse pass.
+      if (resolvedPackage.source === 'git' && !entry.selector?.files?.length) {
+        const selfSetPatterns = (pkgFiledistSets ?? [])
+          .filter((s) => !s.package)
+          .flatMap((s) => s.selector?.files ?? []);
+        sourceRuntime!.expandGitSparseCheckout(
+          pkgPath,
+          selfSetPatterns.length > 0 ? [...new Set(selfSetPatterns)] : ['**'],
+        );
+      }
+
       const outputDir = path.resolve(cwd, mergedOutput.path ?? '.');
       addRelevantPackage(relevantPackagesByOutputDir, outputDir, resolvedPackage.packageName);
       markNoSyncOutput(noSyncOutputDirs, outputDir, mergedOutput.noSync === true);
