@@ -434,4 +434,67 @@ describe('cli', () => {
       'Shell strings like "node scripts/post-extract.js" are not supported.',
     );
   });
+
+  it('.filedistrc.local.yml is used when present and no --config is given', async () => {
+    const outputLocal = path.join(tmpDir, 'output-local');
+    const outputDefault = path.join(tmpDir, 'output-default');
+
+    // Write a standard config that points to outputDefault
+    fs.writeFileSync(
+      path.join(tmpDir, '.filedistrc.yml'),
+      `sets:\n  - package: ${PKG_NAME}\n    output:\n      path: ${outputDefault}\n      gitignore: false\n`,
+    );
+
+    // Write a local config that points to outputLocal
+    fs.writeFileSync(
+      path.join(tmpDir, '.filedistrc.local.yml'),
+      `sets:\n  - package: ${PKG_NAME}\n    output:\n      path: ${outputLocal}\n      gitignore: false\n`,
+    );
+
+    await cli(['node', 'filedist', 'extract'], tmpDir);
+
+    // Only the local config output should be populated
+    expect(fs.existsSync(path.join(outputLocal, 'docs/guide.md'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDefault, 'docs/guide.md'))).toBe(false);
+  }, 60_000);
+
+  it('.filedistrc.local.yml is ignored when --config is explicitly given', async () => {
+    const outputLocal = path.join(tmpDir, 'output-local-ignored');
+    const outputExplicit = path.join(tmpDir, 'output-explicit');
+    const configFile = path.join(tmpDir, 'explicit.json');
+
+    // Write a local config
+    fs.writeFileSync(
+      path.join(tmpDir, '.filedistrc.local.yml'),
+      `sets:\n  - package: ${PKG_NAME}\n    output:\n      path: ${outputLocal}\n      gitignore: false\n`,
+    );
+
+    // Write an explicit config
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify({
+        sets: [{ package: PKG_NAME, output: { path: outputExplicit, gitignore: false } }],
+      }),
+    );
+
+    await cli(['node', 'filedist', 'extract', '--config', configFile], tmpDir);
+
+    // Only the explicit config output should be populated
+    expect(fs.existsSync(path.join(outputExplicit, 'docs/guide.md'))).toBe(true);
+    expect(fs.existsSync(path.join(outputLocal, 'docs/guide.md'))).toBe(false);
+  }, 60_000);
+
+  it('.filedistrc.local.yml falls through to standard config search when absent', async () => {
+    const outputStandard = path.join(tmpDir, 'output-standard');
+
+    // Only a standard config exists, no local config
+    fs.writeFileSync(
+      path.join(tmpDir, '.filedistrc.yml'),
+      `sets:\n  - package: ${PKG_NAME}\n    output:\n      path: ${outputStandard}\n      gitignore: false\n`,
+    );
+
+    await cli(['node', 'filedist', 'extract'], tmpDir);
+
+    expect(fs.existsSync(path.join(outputStandard, 'docs/guide.md'))).toBe(true);
+  }, 60_000);
 });

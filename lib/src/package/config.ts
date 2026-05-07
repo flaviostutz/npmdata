@@ -123,6 +123,32 @@ export async function loadFiledistConfigFromDirectory(
 }
 
 const RC_FILENAME = '.filedistrc.yml';
+const LOCAL_RC_FILENAME = '.filedistrc.local.yml';
+
+/**
+ * Load a filedist configuration from `.filedistrc.local.yml` in the given directory.
+ * Returns the config when found, or null when the file does not exist or is empty.
+ * The local config file is intentionally not searched in parent directories.
+ */
+export async function loadFiledistLocalConfig(directory: string): Promise<FiledistConfig | null> {
+  const filePath = path.join(directory, LOCAL_RC_FILENAME);
+  const explorer = cosmiconfig('filedist');
+  let result;
+  try {
+    result = await explorer.load(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // eslint-disable-next-line unicorn/no-null
+      return null;
+    }
+    throw error;
+  }
+  if (!result || result.isEmpty) {
+    // eslint-disable-next-line unicorn/no-null
+    return null;
+  }
+  return validateFiledistConfig(result.config as RawFiledistConfig, result.filepath);
+}
 
 /**
  * Upsert entries into a filedist YAML config file.

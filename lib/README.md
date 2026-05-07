@@ -155,13 +155,16 @@ npx filedist purge     # purges the same effective set selection
 
 Config is resolved using [cosmiconfig](https://github.com/cosmiconfig/cosmiconfig). Sources searched in order from the current directory:
 
-| Source | Key / format |
-|---|---|
-| `package.json` | `"filedist"` key — object with `"sets"` array |
-| `.filedistrc` | JSON or YAML object with `"sets"` array |
-| `.filedistrc.json` | JSON object with `"sets"` array |
-| `.filedistrc.yaml` / `.filedistrc.yml` | YAML object with `"sets"` array |
-| `filedist.config.js` | CommonJS module exporting object with `sets` array |
+| Source | Key / format | Notes |
+|---|---|---|
+| `.filedistrc.local.yml` | YAML object with `"sets"` array | Local-only override; checked first; not searched in parent dirs |
+| `package.json` | `"filedist"` key — object with `"sets"` array | |
+| `.filedistrc` | JSON or YAML object with `"sets"` array | |
+| `.filedistrc.json` | JSON object with `"sets"` array | |
+| `.filedistrc.yaml` / `.filedistrc.yml` | YAML object with `"sets"` array | |
+| `filedist.config.js` | CommonJS module exporting object with `sets` array | |
+
+When `.filedistrc.local.yml` is present in the current directory it takes full priority over all other config sources. This is useful when you are developing a package that already ships its own filedist config (e.g. in `package.json`) but you need to run extra extractions locally — for example to pull other packages into your workspace — without those entries being part of the published package config.
 
 All runner flags (`--dry-run`, `--silent`, `--verbose`, `--gitignore=false`, `--managed=false`, `--presets`, `--output`) work as usual.
 When `filedist.defaultPresets` is defined, `extract`, `check`, and `purge` behave as if `--presets <tags>` had been passed automatically. Passing `--presets` explicitly overrides that configured default for the current invocation.

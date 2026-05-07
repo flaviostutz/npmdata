@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   searchAndLoadFiledistConfig,
   loadFiledistConfigFile,
+  loadFiledistLocalConfig,
   upsertFiledistConfigEntries,
 } from '../package/config';
 import { FiledistConfig } from '../types';
@@ -102,7 +103,11 @@ async function resolveConfig(
     // eslint-disable-next-line unicorn/no-null
     config = null;
   } else {
-    config = await searchAndLoadFiledistConfig(effectiveConfigSearchCwd);
+    // Try .filedistrc.local.yml first (only in the current directory, not parents).
+    // This allows a package that publishes its own sets to also run filedist for
+    // its own workspace needs without those entries leaking into the published config.
+    const localConfig = await loadFiledistLocalConfig(effectiveConfigSearchCwd);
+    config = localConfig ?? (await searchAndLoadFiledistConfig(effectiveConfigSearchCwd));
   }
 
   // When --packages is specified, persist the entries to the config file (yml only)
