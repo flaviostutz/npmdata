@@ -70,8 +70,8 @@ export async function diff(
       continue;
     }
 
-    if (outputConfig.keepExisting && destExists) {
-      result.toSkip.push({ relPath, reason: 'keep-existing' });
+    if (outputConfig.mutable && destExists) {
+      result.toSkip.push({ relPath, reason: 'mutable' });
       continue;
     }
 
@@ -100,7 +100,7 @@ export async function diff(
     const destHash = await hashFile(destPath);
 
     if (srcHash === destHash) {
-      result.toSkip.push({ relPath, reason: 'keep-existing' });
+      result.toSkip.push({ relPath, reason: 'unchanged' });
     } else {
       result.toModify.push({ relPath, sourcePath: srcPath, destPath, hash: srcHash });
     }

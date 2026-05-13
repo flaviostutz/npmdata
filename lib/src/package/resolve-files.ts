@@ -346,7 +346,7 @@ function buildResolvedFile(
     managed: output.managed !== false,
     gitignore: output.gitignore !== false,
     force: output.force ?? false,
-    ignoreIfExisting: output.keepExisting ?? false,
+    mutable: output.mutable ?? false,
     noSync: output.noSync === true,
     contentReplacements: output.contentReplacements ?? [],
     symlinks: output.symlinks ?? [],

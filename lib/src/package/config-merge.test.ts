@@ -102,11 +102,11 @@ describe('mergeOutputConfig', () => {
     expect(result.force).toBe(true);
   });
 
-  it('caller keepExisting overrides child', () => {
-    const caller = { path: 'out', keepExisting: true };
-    const child = { path: 'sub', keepExisting: false };
+  it('caller mutable overrides child', () => {
+    const caller = { path: 'out', mutable: true };
+    const child = { path: 'sub', mutable: false };
     const result = mergeOutputConfig(caller, child);
-    expect(result.keepExisting).toBe(true);
+    expect(result.mutable).toBe(true);
   });
 
   it('caller dryRun overrides child', () => {

@@ -16,10 +16,10 @@ describe('parseArgv', () => {
     expect(parseArgv([]).force).toBeUndefined();
   });
 
-  it('parses --keep-existing flag', () => {
-    expect(parseArgv(['--keep-existing']).keepExisting).toBe(true);
-    expect(parseArgv(['--keep-existing=false']).keepExisting).toBe(false);
-    expect(parseArgv([]).keepExisting).toBeUndefined();
+  it('parses --mutable flag', () => {
+    expect(parseArgv(['--mutable']).mutable).toBe(true);
+    expect(parseArgv(['--mutable=false']).mutable).toBe(false);
+    expect(parseArgv([]).mutable).toBeUndefined();
   });
 
   it('parses --nosync flag', () => {
@@ -28,9 +28,9 @@ describe('parseArgv', () => {
     expect(parseArgv([]).nosync).toBeUndefined();
   });
 
-  it('throws when --force and --keep-existing are both set', () => {
-    expect(() => parseArgv(['--force', '--keep-existing'])).toThrow(
-      '--force and --keep-existing are mutually exclusive',
+  it('throws when --force and --mutable are both set', () => {
+    expect(() => parseArgv(['--force', '--mutable'])).toThrow(
+      '--force and --mutable are mutually exclusive',
     );
   });
 
@@ -117,7 +117,7 @@ describe('parseArgv', () => {
   it('returns undefined for all boolean flags when none are set', () => {
     const parsed = parseArgv([]);
     expect(parsed.force).toBeUndefined();
-    expect(parsed.keepExisting).toBeUndefined();
+    expect(parsed.mutable).toBeUndefined();
     expect(parsed.dryRun).toBeUndefined();
     expect(parsed.nosync).toBeUndefined();
     expect(parsed.verbose).toBeUndefined();
@@ -202,10 +202,10 @@ describe('applyArgvOverrides', () => {
     expect(result[0].output!.force).toBe(true);
   });
 
-  it('applies --keep-existing override', () => {
-    const parsed = parseArgv(['--keep-existing', '--packages', 'test-pkg']);
+  it('applies --mutable override', () => {
+    const parsed = parseArgv(['--mutable', '--packages', 'test-pkg']);
     const result = applyArgvOverrides([baseEntry], parsed);
-    expect(result[0].output!.keepExisting).toBe(true);
+    expect(result[0].output!.mutable).toBe(true);
   });
 
   it('applies --nosync override', () => {
@@ -214,15 +214,15 @@ describe('applyArgvOverrides', () => {
     expect(result[0].output!.noSync).toBe(true);
   });
 
-  it('preserves config keepExisting=true when --keep-existing is not set on CLI', () => {
-    const entryWithKeepExisting: FiledistExtractEntry = {
+  it('preserves config mutable=true when --mutable is not set on CLI', () => {
+    const entryWithMutable: FiledistExtractEntry = {
       package: 'test-pkg',
-      output: { path: './current', keepExisting: true },
+      output: { path: './current', mutable: true },
       selector: {},
     };
-    const parsed = parseArgv(['--packages', 'test-pkg']); // no --keep-existing
-    const result = applyArgvOverrides([entryWithKeepExisting], parsed);
-    expect(result[0].output!.keepExisting).toBe(true);
+    const parsed = parseArgv(['--packages', 'test-pkg']); // no --mutable
+    const result = applyArgvOverrides([entryWithMutable], parsed);
+    expect(result[0].output!.mutable).toBe(true);
   });
 
   it('applies --gitignore=false override', () => {

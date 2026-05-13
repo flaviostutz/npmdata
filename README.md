@@ -318,7 +318,7 @@ Each entry in `filedist.sets` supports:
 | `selector.presets` | `string[]` | none | Filters which of the **target package's own** `filedist.sets` are recursively extracted. Only sets in the target whose `presets` matches are processed. Does not affect which files are selected from the target package itself |
 | `selector.upgrade` | `boolean` | `false` | Force fresh package install even if a satisfying version is already installed |
 | `output.force` | `boolean` | `false` | Overwrite unmanaged or foreign-owned files |
-| `output.keepExisting` | `boolean` | `false` | Skip files that already exist; create them when absent |
+| `output.mutable` | `boolean` | `false` | Skip files that already exist; mark extracted files as mutable (check ignores content changes) |
 | `output.noSync` | `boolean` | `false` | Keep stale managed files on disk during extract instead of deleting them. `check` still reports them as extra drift until they are removed or synced |
 | `output.gitignore` | `boolean` | `true` | Write `.gitignore` alongside managed files |
 | `output.managed` | `boolean` | `true` | Write files with tracking (marker, read-only). Set to `false` to skip tracking |
@@ -384,7 +384,7 @@ When `extract` recurses, the calling entry’s `output` flags are inherited by e
 |---|---|
 | `force: true` | Transitive entries also overwrite unmanaged / foreign files |
 | `dryRun: true` | No files are written anywhere in the hierarchy |
-| `keepExisting: true` | Existing files are skipped at every level |
+| `mutable: true` | Existing files are skipped at every level; extracted files are marked as mutable |
 | `gitignore: false` | No `.gitignore` entries are created anywhere |
 | `managed: false` | All transitive files are written without a marker or read-only flag |
 | `symlinks` / `contentReplacements` | Appended to each transitive entry’s own lists |
@@ -430,7 +430,7 @@ Extract:  --packages <specs>    Package specs (omit to read from config file)
           --files <patterns>    Filter files by glob
           --content-regex <rx>  Filter files by content
           --force               Overwrite existing/foreign files
-          --keep-existing       Skip existing files
+          --mutable             Skip existing files; mark extracted files as mutable (check ignores content changes)
           --gitignore [bool]    Disable .gitignore management when set to false
           --managed [bool]      Write without tracking when set to false
           --dry-run             Preview without writing

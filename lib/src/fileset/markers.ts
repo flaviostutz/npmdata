@@ -8,8 +8,9 @@ import { MARKER_FILE } from './constants';
 
 /**
  * Read all managed file entries from a .filedist marker file.
- * Format: path|packageName|packageVersion — one row per file, no header.
+ * Format: path|packageName|packageVersion[|kind[|checksum[|mutable]]]
  * Pipe is used as separator so file paths containing commas are handled safely.
+ * Fields beyond the first three are optional for backward compatibility.
  */
 export async function readMarker(markerFilePath: string): Promise<ManagedFileMetadata[]> {
   if (!fs.existsSync(markerFilePath)) {
@@ -24,13 +25,16 @@ export async function readMarker(markerFilePath: string): Promise<ManagedFileMet
       packageName: fields[1] ?? '',
       packageVersion: fields[2] ?? '',
       kind: fields[3] === 'symlink' ? 'symlink' : 'file',
+      ...(fields[4] ? { checksum: fields[4] } : {}),
+      ...(fields[5] === 'mutable' ? { mutable: true as const } : {}),
     };
   });
 }
 
 /**
  * Write managed file entries to a .filedist marker file.
- * Format: path|packageName|packageVersion — one row per file, no header.
+ * Format: path|packageName|packageVersion[|kind[|checksum[|mutable]]]
+ * Trailing empty columns are omitted for backward compatibility.
  * Makes the file read-only after writing.
  */
 export async function writeMarker(
@@ -50,8 +54,19 @@ export async function writeMarker(
     return;
   }
   const rows = entries.map((e) => {
-    if (e.kind === 'symlink') {
-      return `${e.path}|${e.packageName}|${e.packageVersion}|symlink`;
+    const kindField = e.kind === 'symlink' ? 'symlink' : '';
+    const checksumField = e.checksum ?? '';
+    const mutableField = e.mutable ? 'mutable' : '';
+
+    // Include only as many trailing fields as needed (omit trailing empty columns)
+    if (mutableField) {
+      return `${e.path}|${e.packageName}|${e.packageVersion}|${kindField}|${checksumField}|${mutableField}`;
+    }
+    if (checksumField) {
+      return `${e.path}|${e.packageName}|${e.packageVersion}|${kindField}|${checksumField}`;
+    }
+    if (kindField) {
+      return `${e.path}|${e.packageName}|${e.packageVersion}|${kindField}`;
     }
     return `${e.path}|${e.packageName}|${e.packageVersion}`;
   });

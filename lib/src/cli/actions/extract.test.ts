@@ -134,10 +134,10 @@ describe('runExtract — CLI overrides applied to config entries', () => {
     expect(entries[0].output!.gitignore).toBe(false);
   });
 
-  it('overrides keepExisting with --keep-existing', async () => {
-    await runExtract(CONFIG_WITH_SETS, ['--keep-existing'], '/cwd');
+  it('overrides mutable with --mutable', async () => {
+    await runExtract(CONFIG_WITH_SETS, ['--mutable'], '/cwd');
     const { entries } = mockActionExtract.mock.calls[0][0];
-    expect(entries[0].output!.keepExisting).toBe(true);
+    expect(entries[0].output!.mutable).toBe(true);
   });
 
   it('overrides noSync with --nosync', async () => {
@@ -223,9 +223,9 @@ describe('runExtract — preset filtering', () => {
 
 describe('runExtract — error handling', () => {
   it('throws on invalid argv and skips actionExtract', async () => {
-    await expect(
-      runExtract(CONFIG_WITH_SETS, ['--force', '--keep-existing'], '/cwd'),
-    ).rejects.toThrow('--force and --keep-existing are mutually exclusive');
+    await expect(runExtract(CONFIG_WITH_SETS, ['--force', '--mutable'], '/cwd')).rejects.toThrow(
+      '--force and --mutable are mutually exclusive',
+    );
     expect(mockActionExtract).not.toHaveBeenCalled();
   });
 

@@ -17,7 +17,7 @@ A single authoritative reference ensures consistent implementation decisions acr
 **Core concepts**
 
 - **Package** - A source of data files intended to be extracted into a consumer's directory. A package may be an npm package or a git repository. It may include an `filedist` configuration (in `package.json` or `.filedistrc`) describing how its files should be extracted and which other data packages it depends on.
-- **Fileset** - A combination of a package spec (name + optional semver constraint) and instructions that control which files are selected (glob patterns, content regexes, presets) and how they are written to disk (output path, force, keepExisting, managed, gitignore, symlinks, content replacements).
+- **Fileset** - A combination of a package spec (name + optional semver constraint) and instructions that control which files are selected (glob patterns, content regexes, presets) and how they are written to disk (output path, force, mutable, managed, gitignore, symlinks, content replacements).
 - **CLI** - The command-line interface (`npx filedist`) that orchestrates extract, check, list, purge, and init operations. It can be configured via `.filedistrc`, `package.json#filedist`, or direct command-line arguments.
 
 **Usage modes**

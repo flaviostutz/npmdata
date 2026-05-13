@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 
 import { jest } from '@jest/globals';
 
@@ -11,6 +12,10 @@ import { filterEntriesByPresets } from '../utils';
 
 import { actionCheck } from './action-check';
 import { actionExtract } from './action-extract';
+
+function sha256(content: string): string {
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
 
 let tmpDir: string;
 
@@ -34,12 +39,14 @@ describe('actionCheck', () => {
     await installMockPackage('check-action-pkg', '1.0.0', { 'guide.md': '# OK' }, tmpDir);
     const outputDir = path.join(tmpDir, 'out');
     fs.mkdirSync(outputDir, { recursive: true });
-    fs.writeFileSync(path.join(outputDir, 'guide.md'), '# OK');
+    const content = '# OK';
+    fs.writeFileSync(path.join(outputDir, 'guide.md'), content);
 
+    const checksum = crypto.createHash('sha256').update(content).digest('hex');
     const markerFile = markerPath(outputDir);
     fs.mkdirSync(path.dirname(markerFile), { recursive: true });
     await writeMarker(markerFile, [
-      { path: 'guide.md', packageName: 'check-action-pkg', packageVersion: '1.0.0' },
+      { path: 'guide.md', packageName: 'check-action-pkg', packageVersion: '1.0.0', checksum },
     ]);
 
     const entries: FiledistExtractEntry[] = [
@@ -220,7 +227,12 @@ describe('actionCheck', () => {
 
     const markerFile = markerPath(outputDir);
     await writeMarker(markerFile, [
-      { path: 'docs/api.md', packageName: 'sel-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'docs/api.md',
+        packageName: 'sel-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('# API'),
+      },
     ]);
     fs.mkdirSync(path.join(outputDir, 'docs'), { recursive: true });
     fs.writeFileSync(path.join(outputDir, 'docs/api.md'), '# API');
@@ -270,6 +282,7 @@ describe('actionCheck', () => {
         path: 'data/users-dataset/user1.json',
         packageName: 'check-symlink-pkg',
         packageVersion: '1.0.0',
+        checksum: sha256('{"id":1}'),
       },
       {
         path: 'data-symlink/users-dataset',
@@ -383,13 +396,23 @@ describe('actionCheck', () => {
     fs.mkdirSync(path.join(docsOutput, 'docs'), { recursive: true });
     fs.writeFileSync(path.join(docsOutput, 'docs/guide.md'), '# Guide');
     await writeMarker(markerPath(docsOutput), [
-      { path: 'docs/guide.md', packageName: 'presets-docs-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'docs/guide.md',
+        packageName: 'presets-docs-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('# Guide'),
+      },
     ]);
 
     fs.mkdirSync(path.join(dataOutput, 'data'), { recursive: true });
     fs.writeFileSync(path.join(dataOutput, 'data/sample.csv'), 'a,b');
     await writeMarker(markerPath(dataOutput), [
-      { path: 'data/sample.csv', packageName: 'presets-data-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'data/sample.csv',
+        packageName: 'presets-data-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('a,b'),
+      },
     ]);
 
     const entries: FiledistExtractEntry[] = [
@@ -431,7 +454,12 @@ describe('actionCheck', () => {
     fs.mkdirSync(outputDir, { recursive: true });
     fs.writeFileSync(path.join(outputDir, 'file.md'), '# File');
     await writeMarker(markerPath(outputDir), [
-      { path: 'file.md', packageName: 'all-presets-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'file.md',
+        packageName: 'all-presets-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('# File'),
+      },
     ]);
 
     const entries: FiledistExtractEntry[] = [
@@ -535,7 +563,12 @@ describe('actionCheck', () => {
     fs.writeFileSync(path.join(outputDir, 'docs/guide.md'), '# Guide');
     fs.writeFileSync(path.join(outputDir, 'conf/config-schema.js'), 'custom local content');
     await writeMarker(markerPath(outputDir), [
-      { path: 'docs/guide.md', packageName: 'nested-parent', packageVersion: '1.0.0' },
+      {
+        path: 'docs/guide.md',
+        packageName: 'nested-parent',
+        packageVersion: '1.0.0',
+        checksum: sha256('# Guide'),
+      },
     ]);
 
     const result = await actionCheck({
@@ -556,7 +589,12 @@ describe('actionCheck', () => {
 
     const markerFile = markerPath(outputDir);
     await writeMarker(markerFile, [
-      { path: 'readme.md', packageName: 'verbose-check-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'readme.md',
+        packageName: 'verbose-check-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('# hello'),
+      },
     ]);
 
     const entries: FiledistExtractEntry[] = [
@@ -718,8 +756,18 @@ describe('actionCheck', () => {
 
     // Both packages share the same output directory and marker file
     await writeMarker(markerPath(sharedOutput), [
-      { path: 'a.md', packageName: 'shared-pkg-a', packageVersion: '1.0.0' },
-      { path: 'b.md', packageName: 'shared-pkg-b', packageVersion: '1.0.0' },
+      {
+        path: 'a.md',
+        packageName: 'shared-pkg-a',
+        packageVersion: '1.0.0',
+        checksum: sha256('AAA'),
+      },
+      {
+        path: 'b.md',
+        packageName: 'shared-pkg-b',
+        packageVersion: '1.0.0',
+        checksum: sha256('BBB'),
+      },
     ]);
 
     const entries: FiledistExtractEntry[] = [

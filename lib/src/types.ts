@@ -60,13 +60,15 @@ export type OutputConfig = {
    */
   path?: string;
   /**
-   * Overwrite existing unmanaged files. Overridden by --force and --keep-existing.
+   * Overwrite existing unmanaged files. Cannot be combined with mutable.
    */
   force?: boolean;
   /**
    * Skip files that already exist; create missing ones. Cannot combine with force.
+   * Files extracted with this flag set are marked mutable in the .filedist marker,
+   * so the check command skips content verification for them.
    */
-  keepExisting?: boolean;
+  mutable?: boolean;
   /**
    * Create/update .gitignore alongside each .filedist marker.
    */
@@ -189,7 +191,7 @@ export type FileOperation = {
  */
 export type SkippedFile = {
   relPath: string;
-  reason: 'conflict' | 'keep-existing' | 'not-managed';
+  reason: 'conflict' | 'mutable' | 'unchanged' | 'not-managed';
 };
 
 /**
@@ -219,7 +221,8 @@ export type ExtractionMap = {
 
 /**
  * One row in a .filedist CSV marker file.
- * Format: path|packageName|packageVersion — one row per file, no header.
+ * Format: path|packageName|packageVersion[|kind[|checksum[|mutable]]]
+ * Pipe is used as separator so file paths containing commas are handled safely.
  */
 export type ManagedFileMetadata = {
   /** Relative path from marker file directory. */
@@ -230,6 +233,16 @@ export type ManagedFileMetadata = {
   packageVersion: string;
   /** Managed path type. Omitted in marker files for regular files. */
   kind?: 'file' | 'symlink';
+  /**
+   * SHA-256 hash of the file content at extraction time (after content replacements).
+   * Used by check to detect local tampering without re-downloading the source package.
+   */
+  checksum?: string;
+  /**
+   * When true the file is allowed to change locally (e.g. extracted with mutable=true).
+   * The check command skips content verification for mutable files.
+   */
+  mutable?: boolean;
 };
 
 /**
@@ -310,7 +323,7 @@ export type ResolvedFile = {
   /** Whether to overwrite an existing unmanaged file. Default: false. */
   force: boolean;
   /** Whether to skip files that already exist in the output. Default: false. */
-  ignoreIfExisting: boolean;
+  mutable: boolean;
   /** Whether extract should leave stale managed files in place for this output. */
   noSync: boolean;
   /** Content replacement rules applied to this file before comparison. */
@@ -340,7 +353,7 @@ export type DiffEntry = {
   /** Existing marker entry (absent for 'missing' entries and unmanaged conflicts). */
   existing?: ManagedFileMetadata;
   /** Reasons for conflict (only set for 'conflict' status). */
-  conflictReasons?: Array<'content' | 'managed' | 'gitignore'>;
+  conflictReasons?: Array<'content' | 'managed' | 'gitignore' | 'no-checksum'>;
 };
 
 /**

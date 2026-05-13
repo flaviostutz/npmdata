@@ -9,7 +9,7 @@ import {
   BasicPackageOptions,
   ManagedFileMetadata,
 } from '../types';
-import { cleanupTempPackageJson, ensureDir, formatDisplayPath } from '../utils';
+import { cleanupTempPackageJson, ensureDir, formatDisplayPath, hashFileSync } from '../utils';
 import { writeMarker, readOutputDirMarker, markerPath } from '../fileset/markers';
 import { addToGitignore, readManagedGitignoreEntries } from '../fileset/gitignore';
 
@@ -68,7 +68,13 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
     }
 
     // ── Phase 2: Calculate diff ──────────────────────────────────────────────
-    const diff = await calculateDiff(resolvedFiles, verbose, cwd, relevantPackagesByOutputDir);
+    const diff = await calculateDiff(
+      resolvedFiles,
+      verbose,
+      cwd,
+      relevantPackagesByOutputDir,
+      true,
+    );
 
     if (verbose) {
       console.log(
@@ -90,7 +96,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
       for (const entry of fileConflictEntries) {
         const desired = entry.desired!;
         const isUnmanagedConflict = !entry.existing && desired.managed;
-        if (!desired.ignoreIfExisting && !desired.force && isUnmanagedConflict) {
+        if (!desired.mutable && !desired.force && isUnmanagedConflict) {
           throw new Error(
             `Conflict: file "${entry.relPath}" in "${entry.outputDir}" exists and is not managed` +
               ` by filedist.\nUse --force to overwrite or --managed=false to skip.`,
@@ -106,7 +112,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
     ).length;
     for (const entry of fileConflictEntries) {
       const desired = entry.desired!;
-      if (desired.ignoreIfExisting || !desired.managed) {
+      if (desired.mutable || !desired.managed) {
         result.skipped++;
       } else {
         result.modified++;
@@ -187,7 +193,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
     for (const entry of fileConflictEntries) {
       const desired = entry.desired!;
       // managed=false: existing file is user-owned, leave it untouched
-      if (desired.ignoreIfExisting || !desired.managed) {
+      if (desired.mutable || !desired.managed) {
         onProgress?.({
           type: 'file-skipped',
           packageName: desired.packageName,
@@ -308,29 +314,37 @@ async function updateOutputDirMetadata(
   );
 
   // New or updated managed entries produced by this run
-  const addedEntries = [
+  const addedEntries: ManagedFileMetadata[] = [
     ...diff.missing
       .filter((e) => e.outputDir === outputDir && e.desired?.managed)
-      .map((e) => ({
-        path: e.relPath,
-        packageName: e.desired!.packageName,
-        packageVersion: e.desired!.packageVersion,
-        kind: 'file' as const,
-      })),
+      .map((e) => {
+        const destPath = path.join(outputDir, e.relPath);
+        const checksumValue = fs.existsSync(destPath) ? hashFileSync(destPath) : '';
+        return {
+          path: e.relPath,
+          packageName: e.desired!.packageName,
+          packageVersion: e.desired!.packageVersion,
+          kind: 'file' as const,
+          ...(checksumValue ? { checksum: checksumValue } : {}),
+          ...(e.desired!.mutable ? { mutable: true as const } : {}),
+        };
+      }),
     ...diff.conflict
       .filter(
-        (e) =>
-          e.outputDir === outputDir &&
-          !!e.desired &&
-          e.desired.managed &&
-          !e.desired.ignoreIfExisting,
+        (e) => e.outputDir === outputDir && !!e.desired && e.desired.managed && !e.desired.mutable,
       )
-      .map((e) => ({
-        path: e.relPath,
-        packageName: e.desired!.packageName,
-        packageVersion: e.desired!.packageVersion,
-        kind: 'file' as const,
-      })),
+      .map((e) => {
+        const destPath = path.join(outputDir, e.relPath);
+        const checksumValue = fs.existsSync(destPath) ? hashFileSync(destPath) : '';
+        return {
+          path: e.relPath,
+          packageName: e.desired!.packageName,
+          packageVersion: e.desired!.packageVersion,
+          kind: 'file' as const,
+          ...(checksumValue ? { checksum: checksumValue } : {}),
+          ...(e.desired!.mutable ? { mutable: true as const } : {}),
+        };
+      }),
   ];
 
   const currentRelevantPackages =

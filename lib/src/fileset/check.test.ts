@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 
 import { ManagedFileMetadata } from '../types';
 
@@ -24,58 +25,116 @@ const makeMarker = (relPath: string, pkg = 'mypkg', ver = '1.0.0'): ManagedFileM
   packageVersion: ver,
 });
 
+function sha256(content: string): string {
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
+
 describe('checkFileset – package not installed', () => {
-  it('reports all marker entries as missing', async () => {
+  it('reports all marker entries as missing when files do not exist on disk', async () => {
     const marker: ManagedFileMetadata[] = [makeMarker('docs/guide.md'), makeMarker('lib/index.js')];
-    const result = await checkFileset(null, tmpDir, {}, { path: '.' }, marker);
+    const result = await checkFileset(null, tmpDir, marker);
     expect(result.missing).toEqual(['docs/guide.md', 'lib/index.js']);
     expect(result.modified).toHaveLength(0);
     expect(result.extra).toHaveLength(0);
+  });
+
+  it('reports modified via checksum when files exist but content differs', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'guide.md'), '# Tampered');
+
+    const originalContent = '# Original';
+    const marker: ManagedFileMetadata[] = [
+      {
+        path: 'guide.md',
+        packageName: 'mypkg',
+        packageVersion: '1.0.0',
+        checksum: sha256(originalContent),
+      },
+    ];
+
+    const result = await checkFileset(null, outputDir, marker);
+    expect(result.missing).toHaveLength(0);
+    expect(result.modified).toContain('guide.md');
+    expect(result.extra).toHaveLength(0);
+  });
+
+  it('reports ok via checksum when file content matches stored hash', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
+    const content = '# Hello';
+    fs.writeFileSync(path.join(outputDir, 'guide.md'), content);
+
+    const marker: ManagedFileMetadata[] = [
+      {
+        path: 'guide.md',
+        packageName: 'mypkg',
+        packageVersion: '1.0.0',
+        checksum: sha256(content),
+      },
+    ];
+
+    const result = await checkFileset(null, outputDir, marker);
+    expect(result.missing).toHaveLength(0);
+    expect(result.modified).toHaveLength(0);
+  });
+
+  it('skips content check for mutable files even when content differs', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'config.json'), '{"changed": true}');
+
+    const marker: ManagedFileMetadata[] = [
+      {
+        path: 'config.json',
+        packageName: 'mypkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('{"original": true}'),
+        mutable: true,
+      },
+    ];
+
+    const result = await checkFileset(null, outputDir, marker);
+    expect(result.missing).toHaveLength(0);
+    expect(result.modified).toHaveLength(0);
   });
 });
 
 describe('checkFileset – with installed package', () => {
   const PKG_NAME = 'check-test-pkg';
 
-  it('reports nothing when files match exactly', async () => {
-    const pkgPath = await installMockPackage(PKG_NAME, '1.0.0', { 'guide.md': '# Hello' }, tmpDir);
-
+  it('reports modified via stored checksum (no source needed)', async () => {
     const outputDir = path.join(tmpDir, 'out');
     fs.mkdirSync(outputDir, { recursive: true });
 
-    // Write "extracted" file with same content
-    fs.writeFileSync(path.join(outputDir, 'guide.md'), '# Hello');
-
-    // Build a marker entry for the file
-    const marker: ManagedFileMetadata[] = [
-      { path: 'guide.md', packageName: PKG_NAME, packageVersion: '1.0.0' },
-    ];
-
-    const result = await checkFileset(pkgPath, outputDir, {}, { path: outputDir }, marker);
-    expect(result.missing).toHaveLength(0);
-    expect(result.modified).toHaveLength(0);
-    // extra includes package.json because it's in the package but not in marker
-  }, 60000);
-
-  it('reports modified when destination content differs from source', async () => {
-    const pkgPath = await installMockPackage(
-      PKG_NAME,
-      '1.0.0',
-      { 'guide.md': '# Original' },
-      tmpDir,
-    );
-
-    const outputDir = path.join(tmpDir, 'out');
-    fs.mkdirSync(outputDir, { recursive: true });
-
-    // Write "extracted" file with DIFFERENT content
+    const originalContent = '# Original';
     fs.writeFileSync(path.join(outputDir, 'guide.md'), '# Modified by user');
 
     const marker: ManagedFileMetadata[] = [
+      {
+        path: 'guide.md',
+        packageName: PKG_NAME,
+        packageVersion: '1.0.0',
+        checksum: sha256(originalContent),
+      },
+    ];
+
+    // pkgPath is null: source unavailable, but checksum available
+    const result = await checkFileset(null, outputDir, marker);
+    expect(result.modified).toContain('guide.md');
+  }, 60000);
+
+  it('reports modified when marker has no checksum (re-extract required)', async () => {
+    const outputDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'guide.md'), '# Some content');
+
+    // Marker entry without checksum (old format) → reported as modified
+    const marker: ManagedFileMetadata[] = [
       { path: 'guide.md', packageName: PKG_NAME, packageVersion: '1.0.0' },
     ];
 
-    const result = await checkFileset(pkgPath, outputDir, {}, { path: outputDir }, marker);
+    const result = await checkFileset(null, outputDir, marker);
     expect(result.modified).toContain('guide.md');
   }, 60000);
 
@@ -88,7 +147,7 @@ describe('checkFileset – with installed package', () => {
 
     const marker: ManagedFileMetadata[] = [makeMarker('guide.md', PKG_NAME, '1.0.0')];
 
-    const result = await checkFileset(pkgPath, outputDir, {}, { path: outputDir }, marker);
+    const result = await checkFileset(pkgPath, outputDir, marker);
     expect(result.missing).toContain('guide.md');
   }, 60000);
 
@@ -109,7 +168,7 @@ describe('checkFileset – with installed package', () => {
       { path: 'guide.md', packageName: PKG_NAME, packageVersion: '1.0.0' },
     ];
 
-    const result = await checkFileset(pkgPath, outputDir, {}, { path: outputDir }, marker);
+    const result = await checkFileset(pkgPath, outputDir, marker);
     expect(result.extra).toContain('docs/extra.md');
   }, 60000);
 });

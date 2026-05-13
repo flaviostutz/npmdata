@@ -9,7 +9,7 @@ import {
   ExecuteResult,
   ManagedFileMetadata,
 } from '../types';
-import { ensureDir, formatDisplayPath } from '../utils';
+import { ensureDir, formatDisplayPath, hashFileSync } from '../utils';
 import { applyContentReplacements } from '../package/content-replacements';
 
 import { writeMarker, markerPath } from './markers';
@@ -104,6 +104,17 @@ export async function execute(
   // ExecuteResult.deleted is intentionally left at 0 here to avoid double-counting.
   // result.deleted = 0; (already initialised to 0 above)
 
+  // Apply content replacements BEFORE computing checksums so stored hashes reflect
+  // the final on-disk content (including any in-place text substitutions).
+  if (!dryRun && outputConfig.contentReplacements && outputConfig.contentReplacements.length > 0) {
+    if (verbose) {
+      console.log(
+        `[verbose] execute: applying ${outputConfig.contentReplacements.length} content replacement(s) in ${formatDisplayPath(outputDir, displayBaseDir)}`,
+      );
+    }
+    await applyContentReplacements(outputDir, outputConfig.contentReplacements);
+  }
+
   // Update marker and gitignore
   if (!dryRun && !unmanaged) {
     const marker = markerPath(outputDir);
@@ -119,10 +130,14 @@ export async function execute(
     );
 
     for (const op of [...map.toAdd, ...map.toModify]) {
+      // Hash the final file content (after any content replacements applied above)
+      const checksum = hashFileSync(op.destPath);
       updatedEntries.push({
         path: op.relPath,
         packageName: pkg.name,
         packageVersion: pkgVersion,
+        checksum,
+        ...(outputConfig.mutable === true ? { mutable: true as const } : {}),
       });
     }
 
@@ -142,16 +157,6 @@ export async function execute(
       }
       await addToGitignore(outputDir, managedPaths);
     }
-  }
-
-  // Apply content replacements
-  if (!dryRun && outputConfig.contentReplacements && outputConfig.contentReplacements.length > 0) {
-    if (verbose) {
-      console.log(
-        `[verbose] execute: applying ${outputConfig.contentReplacements.length} content replacement(s) in ${formatDisplayPath(outputDir, displayBaseDir)}`,
-      );
-    }
-    await applyContentReplacements(outputDir, outputConfig.contentReplacements);
   }
 
   return result;

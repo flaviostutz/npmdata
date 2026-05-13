@@ -38,7 +38,7 @@ export function mergeSelectorConfig(parent: SelectorConfig, child: SelectorConfi
 
 /**
  * Merge two OutputConfig objects for recursive extraction.
- * - force, keepExisting, gitignore, managed, noSync, dryRun: caller value overrides child
+ * - force, mutable, gitignore, managed, noSync, dryRun: caller value overrides child
  * - path: concatenated (parent/child), undefined treated as '.'
  * - symlinks: appended (parent + child)
  * - contentReplacements: appended (parent + child)
@@ -52,7 +52,7 @@ export function mergeOutputConfig(caller: OutputConfig, child: OutputConfig): Ou
   return {
     path: mergedPath,
     force: caller.force ?? child.force,
-    keepExisting: caller.keepExisting ?? child.keepExisting,
+    mutable: caller.mutable ?? child.mutable,
     gitignore: caller.gitignore ?? child.gitignore,
     managed: caller.managed ?? child.managed,
     noSync: caller.noSync ?? child.noSync,

@@ -1,10 +1,11 @@
 /* eslint-disable no-console */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { ResolvedFile, DiffResult, ManagedFileMetadata } from '../types';
 import { readManagedGitignoreEntries } from '../fileset/gitignore';
-import { hashFile, hashBuffer, formatDisplayPath } from '../utils';
+import { hashFile, isBinaryFile, formatDisplayPath } from '../utils';
 import { readOutputDirMarker } from '../fileset/markers';
 
 import { applyContentReplacementsToBuffer } from './content-replacements';
@@ -24,6 +25,7 @@ export async function calculateDiff(
   verbose?: boolean,
   cwd?: string,
   relevantPackagesByOutputDir?: Map<string, Set<string>>,
+  compareWithSource?: boolean,
 ): Promise<DiffResult> {
   const result: DiffResult = { ok: [], missing: [], extra: [], conflict: [] };
 
@@ -53,6 +55,7 @@ export async function calculateDiff(
       byOutputDir.get(outputDir) ?? [],
       result,
       relevantPackagesByOutputDir?.get(outputDir),
+      compareWithSource,
     );
 
     if (verbose) {
@@ -72,6 +75,7 @@ async function appendOutputDirDiff(
   desiredFiles: ResolvedFile[],
   result: DiffResult,
   relevantPackages?: Set<string>,
+  compareWithSource?: boolean,
 ): Promise<void> {
   const existingMarker = await readOutputDirMarker(outputDir);
   const managedByPath = new Map<string, ManagedFileMetadata>(
@@ -87,7 +91,14 @@ async function appendOutputDirDiff(
     relevantPackages ?? new Set(desiredFiles.map((f) => f.packageName));
 
   for (const desired of desiredFiles) {
-    await classifyDesiredFile(desired, outputDir, managedByPath, gitignorePaths, result);
+    await classifyDesiredFile(
+      desired,
+      outputDir,
+      managedByPath,
+      gitignorePaths,
+      result,
+      compareWithSource,
+    );
   }
 
   for (const desiredSymlink of desiredSymlinks) {
@@ -161,6 +172,14 @@ function classifyDesiredSymlink(
 /**
  * Classify a single desired file against the current output directory state.
  * Appends to the appropriate result bucket (ok, missing, or conflict).
+ *
+ * When compareWithSource=true (used by action-extract), content is compared
+ * against the package source (with content replacements applied). This detects
+ * when the package has been updated since the last extraction.
+ *
+ * When compareWithSource=false (used by action-check), content is compared
+ * against the stored checksum in the marker. This detects tampering without
+ * requiring access to the source package.
  */
 async function classifyDesiredFile(
   desired: ResolvedFile,
@@ -168,6 +187,7 @@ async function classifyDesiredFile(
   managedByPath: Map<string, ManagedFileMetadata>,
   gitignorePaths: Set<string>,
   result: DiffResult,
+  compareWithSource?: boolean,
 ): Promise<void> {
   const destPath = path.join(outputDir, desired.relPath);
   const destExists = fs.existsSync(destPath);
@@ -177,23 +197,34 @@ async function classifyDesiredFile(
     return;
   }
 
-  const conflictReasons: Array<'content' | 'managed' | 'gitignore'> = [];
+  const conflictReasons: Array<'content' | 'managed' | 'gitignore' | 'no-checksum'> = [];
+  const existingEntry = managedByPath.get(desired.relPath);
 
-  // Content check
-  let srcHash: string;
-  try {
-    if (desired.contentReplacements.length > 0) {
-      const srcContent = fs.readFileSync(desired.sourcePath, 'utf8');
-      const transformed = applyContentReplacementsToBuffer(srcContent, desired.contentReplacements);
-      srcHash = hashBuffer(transformed);
-    } else {
-      srcHash = await hashFile(desired.sourcePath);
+  if (compareWithSource) {
+    // Extraction mode: compare disk against package source (with replacements).
+    // Mutable files are allowed to diverge from source — skip content check.
+    if (!existingEntry?.mutable) {
+      const sourceHash = await hashSrcWithReplacements(
+        desired.sourcePath,
+        desired.contentReplacements,
+      );
+      const destHash = await hashFile(destPath);
+      if (sourceHash !== destHash) conflictReasons.push('content');
     }
-  } catch {
-    srcHash = await hashFile(desired.sourcePath);
+  } else {
+    // Check mode: compare disk against stored checksum (no source package needed).
+    // Mutable files are allowed to change locally — skip content verification.
+    // Files with no stored checksum cannot be verified — reported as no-checksum conflict.
+    if (existingEntry?.mutable) {
+      // File is intentionally mutable (e.g. extracted with mutable option); skip content check
+    } else if (existingEntry?.checksum) {
+      const destHash = await hashFile(destPath);
+      if (existingEntry.checksum !== destHash) conflictReasons.push('content');
+    } else {
+      // No stored checksum: marker is from an old extraction; re-extract to repair
+      conflictReasons.push('no-checksum');
+    }
   }
-  const destHash = await hashFile(destPath);
-  if (srcHash !== destHash) conflictReasons.push('content');
 
   // Managed-state check
   const isManaged = managedByPath.has(desired.relPath);
@@ -209,7 +240,7 @@ async function classifyDesiredFile(
       relPath: desired.relPath,
       outputDir,
       desired,
-      existing: managedByPath.get(desired.relPath),
+      existing: existingEntry,
     });
   } else {
     result.conflict.push({
@@ -217,8 +248,22 @@ async function classifyDesiredFile(
       relPath: desired.relPath,
       outputDir,
       desired,
-      existing: managedByPath.get(desired.relPath),
+      existing: existingEntry,
       conflictReasons,
     });
   }
+}
+
+/**
+ * Hash a source file with content replacements applied in-memory.
+ * Used in extraction mode so the comparison is against what will be written to disk.
+ */
+async function hashSrcWithReplacements(
+  srcPath: string,
+  contentReplacements: import('../types').ContentReplacementConfig[],
+): Promise<string> {
+  if (contentReplacements.length === 0 || isBinaryFile(srcPath)) return hashFile(srcPath);
+  const content = fs.readFileSync(srcPath, 'utf8');
+  const transformed = applyContentReplacementsToBuffer(content, contentReplacements);
+  return crypto.createHash('sha256').update(transformed).digest('hex');
 }

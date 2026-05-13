@@ -308,7 +308,7 @@ Each entry in the `filedist.sets` array in `package.json` supports the following
 | `selector.exclude` | `string[]` | `["package.json","bin/**","README.md","node_modules/**"]` (when `files` is unset), none otherwise | Glob patterns to exclude files even when they match `selector.files` (e.g. `["test/**", "**/*.test.*"]`). |
 | `selector.contentRegexes` | `string[]` | none | Regex patterns (as strings) to filter files by content. Only files matching at least one pattern are extracted. |
 | `output.force` | `boolean` | `false` | Allow overwriting existing files or files owned by a different package. |
-| `output.keepExisting` | `boolean` | `false` | Skip files that already exist but create them when absent. Cannot be combined with `force`. |
+| `output.mutable` | `boolean` | `false` | Skip files that already exist; mark extracted files as mutable (check ignores content changes). Cannot be combined with `force`. |
 | `output.noSync` | `boolean` | `false` | Keep stale managed files on disk during extract instead of deleting them. `check` still reports them as extra drift until they are removed or synced. |
 | `output.gitignore` | `boolean` | `true` | Create/update a `.gitignore` file alongside each `.filedist` marker file. Set to `false` to disable. |
 | `output.managed` | `boolean` | `true` | Write files with a `.filedist` marker, `.gitignore` update, and read-only flag. Set to `false` to skip tracking. Existing files are skipped when set to `false`. |
@@ -472,7 +472,7 @@ When `extract` recurses, the caller's `output` flags are inherited by every tran
 |---|---|
 | `force: true` | Transitive entries also overwrite unmanaged / foreign files |
 | `dryRun: true` | No files are written anywhere in the hierarchy |
-| `keepExisting: true` | Existing files are skipped at every level |
+| `mutable: true` | Existing files are skipped at every level; extracted files are marked as mutable |
 | `gitignore: false` | No `.gitignore` entries are created anywhere |
 | `managed: false` | All transitive files are written without a marker or read-only flag |
 | `symlinks` / `contentReplacements` | Appended to each transitive entry's own lists |
@@ -539,8 +539,8 @@ Extract options:
                            "my-pkg@^1.0.0,git:github.com/org/repo.git@main"
   --output, -o <dir>       Output directory (default: current directory)
   --force                  Overwrite existing files or files owned by a different package
-  --keep-existing          Skip files that already exist; create them when absent. Cannot be
-                           combined with --force
+  --mutable                Skip files that already exist; mark extracted files as mutable (check ignores
+                           content changes). Cannot be combined with --force
   --gitignore [bool]       Disable .gitignore management when set to false (enabled by default)
   --managed [bool]         Set to false to write files without a .filedist marker, .gitignore
                            update, or read-only flag. Existing files are skipped. Files can be

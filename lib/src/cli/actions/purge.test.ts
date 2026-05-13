@@ -40,9 +40,9 @@ describe('runPurge — --help', () => {
 });
 
 describe('runPurge — argv validation', () => {
-  it('throws on invalid argv and skips actionPurge (--force + --keep-existing)', async () => {
-    await expect(runPurge(CONFIG, ['--force', '--keep-existing'], '/cwd')).rejects.toThrow(
-      '--force and --keep-existing are mutually exclusive',
+  it('throws on invalid argv and skips actionPurge (--force + --mutable)', async () => {
+    await expect(runPurge(CONFIG, ['--force', '--mutable'], '/cwd')).rejects.toThrow(
+      '--force and --mutable are mutually exclusive',
     );
     expect(mockActionPurge).not.toHaveBeenCalled();
   });

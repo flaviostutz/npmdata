@@ -245,7 +245,7 @@ describe('actionExtract', () => {
     ).rejects.toThrow('Conflict');
   }, 60000);
 
-  it('keep-existing skips files that already exist', async () => {
+  it('mutable skips files that already exist', async () => {
     await installMockPackage('keep-pkg', '1.0.0', { 'guide.md': 'pkg content' }, tmpDir);
 
     const outputDir = path.join(tmpDir, 'output');
@@ -254,7 +254,7 @@ describe('actionExtract', () => {
 
     await actionExtract({
       entries: [
-        { package: 'keep-pkg', output: { path: outputDir, keepExisting: true, gitignore: false } },
+        { package: 'keep-pkg', output: { path: outputDir, mutable: true, gitignore: false } },
       ],
 
       cwd: tmpDir,
@@ -1124,7 +1124,7 @@ describe('actionExtract', () => {
     expect(fs.existsSync(path.join(outputDir, 'dep-out', 'dep.md'))).toBe(false);
   }, 90000);
 
-  it('parent keepExisting cascades and preserves existing files in dep output', async () => {
+  it('parent mutable cascades and preserves existing files in dep output', async () => {
     await installMockPackage('keepex-dep', '1.0.0', { 'dep.md': 'new content from pkg' }, tmpDir);
     await installMockPackage('keepex-main', '1.0.0', { 'main.md': '# Main' }, tmpDir);
 
@@ -1146,16 +1146,16 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    // Pre-create a file in the dep output location — with keepExisting it should NOT be overwritten
+    // Pre-create a file in the dep output location — with mutable it should NOT be overwritten
     fs.mkdirSync(path.join(outputDir, 'dep-out'), { recursive: true });
     fs.writeFileSync(path.join(outputDir, 'dep-out', 'dep.md'), 'existing user content');
 
-    // parent keepExisting: true cascades to dep
+    // parent mutable: true cascades to dep
     await actionExtract({
       entries: [
         {
           package: 'keepex-main',
-          output: { path: outputDir, gitignore: false, keepExisting: true },
+          output: { path: outputDir, gitignore: false, mutable: true },
         },
       ],
 

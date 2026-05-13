@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,6 +8,10 @@ import { addToGitignore } from '../fileset/gitignore';
 import { ResolvedFile } from '../types';
 
 import { calculateDiff } from './calculate-diff';
+
+function sha256(content: string): string {
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
 
 describe('calculateDiff', () => {
   let tmpDir: string;
@@ -43,7 +48,7 @@ describe('calculateDiff', () => {
     managed: true,
     gitignore: false,
     force: false,
-    ignoreIfExisting: false,
+    mutable: false,
     noSync: false,
     contentReplacements: [],
     symlinks: [],
@@ -74,7 +79,12 @@ describe('calculateDiff', () => {
     writeFile(outputDir, 'guide.md', '# Guide');
 
     await writeMarker(markerPath(outputDir), [
-      { path: 'guide.md', packageName: 'test-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'guide.md',
+        packageName: 'test-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('# Guide'),
+      },
     ]);
 
     const resolved = [buildResolvedFile('guide.md', { managed: true, gitignore: false })];
@@ -91,8 +101,14 @@ describe('calculateDiff', () => {
     writeFile(pkgDir, 'guide.md', 'NEW content');
     writeFile(outputDir, 'guide.md', 'OLD content');
 
+    // Marker checksum reflects original extraction ('NEW content'); disk has 'OLD content'
     await writeMarker(markerPath(outputDir), [
-      { path: 'guide.md', packageName: 'test-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'guide.md',
+        packageName: 'test-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('NEW content'),
+      },
     ]);
 
     const resolved = [buildResolvedFile('guide.md')];
@@ -140,7 +156,12 @@ describe('calculateDiff', () => {
     writeFile(outputDir, 'guide.md', '# Guide');
 
     await writeMarker(markerPath(outputDir), [
-      { path: 'guide.md', packageName: 'test-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'guide.md',
+        packageName: 'test-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('# Guide'),
+      },
     ]);
     await addToGitignore(outputDir, ['guide.md']);
 
@@ -213,7 +234,12 @@ describe('calculateDiff', () => {
     // file2 missing from outputDir2
 
     await writeMarker(markerPath(outputDir), [
-      { path: 'file1.md', packageName: 'test-pkg', packageVersion: '1.0.0' },
+      {
+        path: 'file1.md',
+        packageName: 'test-pkg',
+        packageVersion: '1.0.0',
+        checksum: sha256('# 1'),
+      },
     ]);
 
     const srcPath2 = path.join(pkgDir, 'file2.md');
@@ -228,7 +254,7 @@ describe('calculateDiff', () => {
         managed: true,
         gitignore: false,
         force: false,
-        ignoreIfExisting: false,
+        mutable: false,
         noSync: false,
         contentReplacements: [],
         symlinks: [],

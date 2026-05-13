@@ -362,7 +362,7 @@ describe('resolveFiles', () => {
         {
           package: 'split-repeat-pkg',
           selector: { files: ['data/user2.json'] },
-          output: { path: outputDir, managed: false, keepExisting: true, gitignore: false },
+          output: { path: outputDir, managed: false, mutable: true, gitignore: false },
         },
       ],
       { cwd: tmpDir },
@@ -371,7 +371,7 @@ describe('resolveFiles', () => {
     expect(files).toHaveLength(2);
     expect(files.find((f) => f.relPath === 'data/user1.json')?.managed).toBe(true);
     expect(files.find((f) => f.relPath === 'data/user2.json')?.managed).toBe(false);
-    expect(files.find((f) => f.relPath === 'data/user2.json')?.ignoreIfExisting).toBe(true);
+    expect(files.find((f) => f.relPath === 'data/user2.json')?.mutable).toBe(true);
   }, 60000);
 
   it('applies explicit selectors through package self-set recursion using semantic file matching', async () => {
@@ -427,7 +427,7 @@ describe('resolveFiles', () => {
         {
           package: 'explicit-selector-pkg',
           selector: { files: ['.configs/database.config.json'] },
-          output: { path: outputDir, managed: false, keepExisting: true, gitignore: false },
+          output: { path: outputDir, managed: false, mutable: true, gitignore: false },
         },
       ],
       { cwd: tmpDir },
@@ -437,9 +437,7 @@ describe('resolveFiles', () => {
     expect(files.find((f) => f.relPath === '.configs/app.config.json')?.managed).toBe(true);
     expect(files.find((f) => f.relPath === 'docs/README.md')?.managed).toBe(true);
     expect(files.find((f) => f.relPath === '.configs/database.config.json')?.managed).toBe(false);
-    expect(files.find((f) => f.relPath === '.configs/database.config.json')?.ignoreIfExisting).toBe(
-      true,
-    );
+    expect(files.find((f) => f.relPath === '.configs/database.config.json')?.mutable).toBe(true);
   }, 60000);
 
   it('deduplicates files resolved by the same package twice', async () => {

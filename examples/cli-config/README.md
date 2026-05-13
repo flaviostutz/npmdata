@@ -151,7 +151,7 @@ Each entry supports the same fields as a data-package `"filedist.sets"` array en
 | `selector.files` | `string[]` | Glob patterns to filter which files are extracted |
 | `presets` | `string[]` | Optional preset tags for filtering with `--presets` |
 | `output.force` | `boolean` | Overwrite existing files |
-| `output.keepExisting` | `boolean` | Skip files that already exist |
+| `output.mutable` | `boolean` | Skip files that already exist; mark extracted files as mutable (check ignores content changes) |
 | `output.gitignore` | `boolean` | Manage `.gitignore` (default: `true`) |
 | `output.managed` | `boolean` | Write with `.filedist` marker (default: `true`). Set to `false` to skip tracking |
 | `output.dryRun` | `boolean` | Simulate without writing |

@@ -1,53 +1,33 @@
 import path from 'node:path';
 import fs from 'node:fs';
 
-import {
-  SelectorConfig,
-  OutputConfig,
-  ManagedFileMetadata,
-  CheckResult,
-  ContentReplacementConfig,
-} from '../types';
-import { hashFile, hashBuffer } from '../utils';
-import { applyContentReplacementsToBuffer } from '../package/content-replacements';
+import { SelectorConfig, ManagedFileMetadata, CheckResult } from '../types';
+import { hashFile } from '../utils';
 
 import { enumeratePackageFiles } from './package-files';
 
 /**
- * Check whether locally extracted files are in sync with their package source.
- * Reuses diff logic to classify files as missing, modified, or extra.
- * Applies contentReplacements before hash comparison.
+ * Check whether locally extracted files are in sync with their source.
  *
- * @param pkgPath       Absolute path to the installed package directory, or null if not installed.
+ * Uses the checksum stored in each .filedist marker entry to verify file integrity
+ * without requiring access to the original source package.
+ * Mutable marker entries (extracted with mutable option) are excluded from the check.
+ * Entries without a stored checksum are reported as modified (re-extract to repair).
+ *
+ * @param pkgPath       Absolute path to the installed package directory, or null.
+ *                      Used only for extra-file detection; not for content comparison.
  * @param outputDir     Absolute path to the output directory.
  * @param selector      SelectorConfig controlling which package files are in scope.
- * @param outputConfig  OutputConfig (used for contentReplacements).
  * @param marker        Managed file entries from the .filedist marker.
  * @returns CheckResult with missing, modified, and extra arrays.
  */
 export async function checkFileset(
   pkgPath: string | null,
   outputDir: string,
-  selector: SelectorConfig,
-  outputConfig: OutputConfig,
   marker: ManagedFileMetadata[],
+  selector: SelectorConfig = {},
 ): Promise<CheckResult> {
-  const contentReplacements: ContentReplacementConfig[] = outputConfig.contentReplacements ?? [];
-
-  if (!pkgPath) {
-    // Package not installed
-    return {
-      missing: marker.map((m) => m.path),
-      modified: [],
-      extra: [],
-    };
-  }
-
   const managedByPath = new Map<string, ManagedFileMetadata>(marker.map((m) => [m.path, m]));
-
-  // Enumerate files from package (in scope)
-  const pkgFiles = await enumeratePackageFiles(pkgPath, selector);
-  const pkgFileSet = new Set(pkgFiles);
 
   const result: CheckResult = { missing: [], modified: [], extra: [] };
 
@@ -59,25 +39,26 @@ export async function checkFileset(
       continue;
     }
 
-    // Compare hash with content replacements applied
-    if (pkgFileSet.has(m.path)) {
-      const srcPath = path.join(pkgPath, m.path);
-      const srcContent = fs.readFileSync(srcPath, 'utf8');
-      const transformed = applyContentReplacementsToBuffer(srcContent, contentReplacements);
-      const srcHash = hashBuffer(transformed);
+    // Mutable files are allowed to change locally; skip content check
+    if (m.mutable) continue;
 
+    if (m.checksum) {
+      // Compare local file against stored checksum (no source needed)
       const destHash = await hashFile(destPath);
-
-      if (srcHash !== destHash) {
+      if (m.checksum !== destHash) {
         result.modified.push(m.path);
       }
+    } else {
+      // No stored checksum: marker is from an old extraction; re-extract to repair
+      result.modified.push(m.path);
     }
   }
 
   // Find extra files: in filtered package source but never extracted (not in marker).
-  // Only perform this check when the marker is non-empty; an empty marker means no
-  // extraction has taken place or everything was purged, so there is nothing to drift.
-  if (marker.length > 0) {
+  // Only perform this check when the marker is non-empty and package is available;
+  // an empty marker means no extraction has taken place or everything was purged.
+  if (pkgPath && marker.length > 0) {
+    const pkgFiles = await enumeratePackageFiles(pkgPath, selector);
     for (const relPath of pkgFiles) {
       if (!managedByPath.has(relPath)) {
         result.extra.push(relPath);

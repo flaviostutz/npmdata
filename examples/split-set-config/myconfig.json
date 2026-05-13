@@ -27,7 +27,7 @@
         "path": "output",
         "gitignore": false,
         "managed": false,
-        "keepExisting": true
+        "mutable": true
       }
     }
   ]

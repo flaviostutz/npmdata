@@ -93,19 +93,19 @@ describe('diff', () => {
     expect(result.conflicts).toHaveLength(0);
   });
 
-  it('skips existing files when keepExisting=true', async () => {
+  it('skips existing files when mutable=true', async () => {
     writeFile(pkgDir, 'guide.md', 'pkg content');
     writeFile(outputDir, 'guide.md', 'user content');
     const result = await diff(
       pkgDir,
       outputDir,
       { files: ['**'] },
-      { path: '.', keepExisting: true },
+      { path: '.', mutable: true },
       [],
       [],
     );
     expect(result.toSkip).toHaveLength(1);
-    expect(result.toSkip[0].reason).toBe('keep-existing');
+    expect(result.toSkip[0].reason).toBe('mutable');
     expect(result.toAdd).toHaveLength(0);
     expect(result.conflicts).toHaveLength(0);
   });

@@ -64,9 +64,9 @@ describe('runCheck — config validation', () => {
 });
 
 describe('runCheck — argv validation', () => {
-  it('throws on invalid argv and skips actionCheck (--force + --keep-existing)', async () => {
-    await expect(runCheck(CONFIG, ['--force', '--keep-existing'], '/cwd')).rejects.toThrow(
-      '--force and --keep-existing are mutually exclusive',
+  it('throws on invalid argv and skips actionCheck (--force + --mutable)', async () => {
+    await expect(runCheck(CONFIG, ['--force', '--mutable'], '/cwd')).rejects.toThrow(
+      '--force and --mutable are mutually exclusive',
     );
     expect(mockActionCheck).not.toHaveBeenCalled();
   });

@@ -21,7 +21,7 @@ export type ParsedArgv = {
   presets?: string[];
   configFile?: string;
   force?: boolean;
-  keepExisting?: boolean;
+  mutable?: boolean;
   /** --nosync / --nosync=true|false */
   nosync?: boolean;
   /** --gitignore / --gitignore=true|false */
@@ -63,7 +63,7 @@ function buildOutputFromArgv(parsed: ParsedArgv): OutputConfig {
   return {
     ...(parsed.output !== undefined ? { path: parsed.output } : {}),
     ...(parsed.force !== undefined ? { force: parsed.force } : {}),
-    ...(parsed.keepExisting !== undefined ? { keepExisting: parsed.keepExisting } : {}),
+    ...(parsed.mutable !== undefined ? { mutable: parsed.mutable } : {}),
     ...(parsed.nosync !== undefined ? { noSync: parsed.nosync } : {}),
     ...(parsed.gitignore !== undefined ? { gitignore: parsed.gitignore } : {}),
     ...(parsed.managed !== undefined ? { managed: parsed.managed } : {}),
@@ -105,10 +105,10 @@ export function parseArgv(argv: string[]): ParsedArgv {
   };
 
   const force = getBoolFlag('--force');
-  const keepExisting = getBoolFlag('--keep-existing');
+  const mutable = getBoolFlag('--mutable');
 
-  if (force === true && keepExisting === true) {
-    throw new Error('--force and --keep-existing are mutually exclusive');
+  if (force === true && mutable === true) {
+    throw new Error('--force and --mutable are mutually exclusive');
   }
 
   const packages = getCommaSplit('--packages');
@@ -131,7 +131,7 @@ export function parseArgv(argv: string[]): ParsedArgv {
     presets,
     configFile: getValue('--config'),
     force,
-    keepExisting,
+    mutable,
     nosync: getBoolFlag('--nosync'),
     gitignore: getBoolFlag('--gitignore'),
     managed: getBoolFlag('--managed'),
@@ -186,7 +186,7 @@ export function applyArgvOverrides(
 
       ...(parsed.output !== undefined ? { path: parsed.output } : {}),
       ...(parsed.force !== undefined ? { force: parsed.force } : {}),
-      ...(parsed.keepExisting !== undefined ? { keepExisting: parsed.keepExisting } : {}),
+      ...(parsed.mutable !== undefined ? { mutable: parsed.mutable } : {}),
       ...(parsed.nosync !== undefined ? { noSync: parsed.nosync } : {}),
       ...(parsed.gitignore !== undefined ? { gitignore: parsed.gitignore } : {}),
       ...(parsed.managed !== undefined ? { managed: parsed.managed } : {}),

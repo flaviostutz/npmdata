@@ -23,7 +23,7 @@ Options:
   --files <globs>         Comma-separated glob patterns for file selection.
   --content-regex <re>    Comma-separated regex strings for content filtering.
   --force                 Overwrite existing unmanaged files.
-  --keep-existing         Skip files that already exist; create missing ones.
+  --mutable               Skip files that already exist; mark extracted files as mutable (check ignores content changes).
   --nosync [bool]         Keep stale managed files on disk during extract (default: false).
   --gitignore [bool]      Enable/disable .gitignore update (default: true). Use --gitignore=false to disable.
   --managed [bool]        Enable/disable managed mode (default: true). Use --managed=false to write without .filedist marker.

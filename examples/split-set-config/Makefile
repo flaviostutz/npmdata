@@ -15,7 +15,7 @@ test: clean install
 
 	# --- Test 1: split-set extraction from myconfig.json (no 'filedist' key in package.json) ---
 	# Set 1 extracts .configs/** and docs/** but EXCLUDES .configs/database.config.json
-	# Set 2 extracts ONLY .configs/database.config.json as managed=false with keepExisting
+	# Set 2 extracts ONLY .configs/database.config.json as managed=false with mutable
 	pnpm exec filedist extract --config myconfig.json
 	test -e output/.configs/app.config.json
 	test -e output/docs/README.md
@@ -37,12 +37,12 @@ test: clean install
 	pnpm exec filedist extract --config myconfig.json
 	pnpm exec filedist check --config myconfig.json
 
-	# --- Test 2: keepExisting prevents overwriting a pre-existing file ---
+	# --- Test 2: mutable prevents overwriting a pre-existing file ---
 	# Overwrite the managed=false file with custom content (it is not read-only, being managed=false)
 	echo "custom local content" > output/.configs/database.config.json
 	# Re-extract (without purge): Set 2 sees the file already exists and skips it
 	pnpm exec filedist extract --config myconfig.json
-	# Custom content must be preserved — keepExisting skips extraction when file exists
+	# Custom content must be preserved — mutable skips extraction when file exists
 	grep -q "custom local content" output/.configs/database.config.json
 
 	# check: all managed files should be in sync (database.config.json is drifted, but is managed=false)
