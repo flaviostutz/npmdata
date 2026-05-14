@@ -110,10 +110,17 @@ describe('readMarker', () => {
 
   it('parses mutable flag', async () => {
     const mPath = path.join(tmpDir, '.filedist');
-    fs.writeFileSync(mPath, 'README.md|mypkg|1.0.0||abc123|mutable\n');
+    fs.writeFileSync(mPath, 'README.md|mypkg|1.0.0||abc123|1\n');
     const result = await readMarker(mPath);
     expect(result[0].checksum).toBe('abc123');
     expect(result[0].mutable).toBe(true);
+  });
+
+  it('parses mutable=0 as not mutable', async () => {
+    const mPath = path.join(tmpDir, '.filedist');
+    fs.writeFileSync(mPath, 'README.md|mypkg|1.0.0||abc123|0\n');
+    const result = await readMarker(mPath);
+    expect(result[0].mutable).toBeUndefined();
   });
 
   it('treats missing checksum and mutable columns as undefined', async () => {
@@ -175,7 +182,7 @@ describe('writeMarker', () => {
     expect(content).toContain('link/a.md|mypkg|1.2.3|symlink|deadbeef');
   });
 
-  it('writes mutable flag when set', async () => {
+  it('writes mutable=1 when set', async () => {
     const mPath = path.join(tmpDir, '.filedist');
     await writeMarker(mPath, [
       {
@@ -187,7 +194,16 @@ describe('writeMarker', () => {
       },
     ]);
     const content = fs.readFileSync(mPath, 'utf8');
-    expect(content).toContain('README.md|mypkg|1.2.3||abc123|mutable');
+    expect(content).toContain('README.md|mypkg|1.2.3||abc123|1');
+  });
+
+  it('writes mutable=0 when not set but checksum is present', async () => {
+    const mPath = path.join(tmpDir, '.filedist');
+    await writeMarker(mPath, [
+      { path: 'README.md', packageName: 'mypkg', packageVersion: '1.2.3', checksum: 'abc123' },
+    ]);
+    const content = fs.readFileSync(mPath, 'utf8');
+    expect(content).toContain('README.md|mypkg|1.2.3||abc123|0');
   });
 
   it('omits trailing empty columns for plain files without checksum', async () => {
@@ -195,8 +211,10 @@ describe('writeMarker', () => {
     await writeMarker(mPath, [
       { path: 'README.md', packageName: 'mypkg', packageVersion: '1.2.3' },
     ]);
-    const content = fs.readFileSync(mPath, 'utf8').trim();
-    expect(content).toBe('README.md|mypkg|1.2.3');
+    const content = fs.readFileSync(mPath, 'utf8');
+    // Entry row has no checksum so no trailing columns; self-checksum row is appended
+    expect(content).toContain('README.md|mypkg|1.2.3\n');
+    expect(content).toMatch(/\.\|[\da-f]{12}/);
   });
 
   it('removes existing marker file when writing empty entries', async () => {
@@ -244,5 +262,62 @@ describe('readOutputDirMarker', () => {
     const result = await readOutputDirMarker(tmpDir);
     expect(result).toHaveLength(1);
     expect(result[0].path).toBe('doc.md');
+  });
+});
+
+describe('self-checksum (writeMarker + readMarker round-trip)', () => {
+  it('appends a .|<hash> self-checksum row after entry rows', async () => {
+    const mPath = path.join(tmpDir, '.filedist');
+    await writeMarker(mPath, [{ path: 'a.md', packageName: 'pkg', packageVersion: '1.0.0' }]);
+    const raw = fs.readFileSync(mPath, 'utf8');
+    expect(raw).toMatch(/\.\|[\da-f]{12}/);
+  });
+
+  it('round-trips correctly: readMarker returns original entries', async () => {
+    const mPath = path.join(tmpDir, '.filedist');
+    const entries = [
+      { path: 'README.md', packageName: 'mypkg', packageVersion: '1.2.3', checksum: 'abc123' },
+      { path: 'docs/guide.md', packageName: 'mypkg', packageVersion: '1.2.3' },
+    ];
+    await writeMarker(mPath, entries);
+    const result = await readMarker(mPath);
+    expect(result).toHaveLength(2);
+    expect(result[0].path).toBe('README.md');
+    expect(result[0].checksum).toBe('abc123');
+    expect(result[1].path).toBe('docs/guide.md');
+  });
+
+  it('throws when the self-checksum row is tampered', async () => {
+    const mPath = path.join(tmpDir, '.filedist');
+    await writeMarker(mPath, [{ path: 'a.md', packageName: 'pkg', packageVersion: '1.0.0' }]);
+    // Make writable so we can tamper
+    fs.chmodSync(mPath, 0o644);
+    const raw = fs.readFileSync(mPath, 'utf8');
+    const tampered = raw.replace(
+      /\.\|[\da-f]+/,
+      '.|0000000000000000000000000000000000000000000000000000000000000000',
+    );
+    fs.writeFileSync(mPath, tampered);
+    await expect(readMarker(mPath)).rejects.toThrow('tampered');
+  });
+
+  it('throws when entry lines are tampered (checksum no longer matches)', async () => {
+    const mPath = path.join(tmpDir, '.filedist');
+    await writeMarker(mPath, [{ path: 'a.md', packageName: 'pkg', packageVersion: '1.0.0' }]);
+    fs.chmodSync(mPath, 0o644);
+    const raw = fs.readFileSync(mPath, 'utf8');
+    // Replace entry content to simulate tampering
+    const tampered = raw.replace('a.md|pkg|1.0.0', 'evil.md|pkg|1.0.0');
+    fs.writeFileSync(mPath, tampered);
+    await expect(readMarker(mPath)).rejects.toThrow('tampered');
+  });
+
+  it('reads legacy markers without a self-checksum line without error', async () => {
+    const mPath = path.join(tmpDir, '.filedist');
+    // Write directly without checksum (legacy format)
+    fs.writeFileSync(mPath, 'README.md|mypkg|1.0.0\ndocs/guide.md|mypkg|1.0.0\n');
+    const result = await readMarker(mPath);
+    expect(result).toHaveLength(2);
+    expect(result[0].path).toBe('README.md');
   });
 });

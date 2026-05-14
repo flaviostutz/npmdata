@@ -221,7 +221,7 @@ describe('resolveFiles', () => {
     expect(files).toHaveLength(1);
     expect(files[0].relPath).toBe('docs/guide.md');
     expect(files[0].packageName).toBe(repo.repoUrl);
-    expect(files[0].packageVersion).toBe(repo.head);
+    expect(files[0].packageVersion).toBe(repo.head.slice(0, 12));
   }, 60000);
 
   it('loads nested .filedistrc config from cloned git repos recursively', async () => {

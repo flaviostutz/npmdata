@@ -9,7 +9,13 @@ import {
   BasicPackageOptions,
   ManagedFileMetadata,
 } from '../types';
-import { cleanupTempPackageJson, ensureDir, formatDisplayPath, hashFileSync } from '../utils';
+import {
+  cleanupTempPackageJson,
+  ensureDir,
+  formatDisplayPath,
+  hashFileSync,
+  shortenChecksum,
+} from '../utils';
 import { writeMarker, readOutputDirMarker, markerPath } from '../fileset/markers';
 import { addToGitignore, readManagedGitignoreEntries } from '../fileset/gitignore';
 
@@ -319,7 +325,9 @@ async function updateOutputDirMetadata(
       .filter((e) => e.outputDir === outputDir && e.desired?.managed)
       .map((e) => {
         const destPath = path.join(outputDir, e.relPath);
-        const checksumValue = fs.existsSync(destPath) ? hashFileSync(destPath) : '';
+        const checksumValue = fs.existsSync(destPath)
+          ? shortenChecksum(hashFileSync(destPath))
+          : '';
         return {
           path: e.relPath,
           packageName: e.desired!.packageName,
@@ -335,7 +343,9 @@ async function updateOutputDirMetadata(
       )
       .map((e) => {
         const destPath = path.join(outputDir, e.relPath);
-        const checksumValue = fs.existsSync(destPath) ? hashFileSync(destPath) : '';
+        const checksumValue = fs.existsSync(destPath)
+          ? shortenChecksum(hashFileSync(destPath))
+          : '';
         return {
           path: e.relPath,
           packageName: e.desired!.packageName,

@@ -2,15 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { ManagedFileMetadata } from '../types';
-import { ensureDir } from '../utils';
+import { ensureDir, hashBuffer, shortenChecksum } from '../utils';
 
 import { MARKER_FILE } from './constants';
+
+/** Special path used for the self-checksum row at the end of a marker file. */
+const SELF_CHECKSUM_PATH = '.';
 
 /**
  * Read all managed file entries from a .filedist marker file.
  * Format: path|packageName|packageVersion[|kind[|checksum[|mutable]]]
  * Pipe is used as separator so file paths containing commas are handled safely.
  * Fields beyond the first three are optional for backward compatibility.
+ * mutable column: '1' = mutable, '0' or absent = not mutable.
+ *
+ * A trailing self-checksum row `.|<sha256hex>` covers all entry rows.
+ * When present, integrity is verified and an error is thrown on mismatch.
  */
 export async function readMarker(markerFilePath: string): Promise<ManagedFileMetadata[]> {
   if (!fs.existsSync(markerFilePath)) {
@@ -18,7 +25,22 @@ export async function readMarker(markerFilePath: string): Promise<ManagedFileMet
   }
   const content = fs.readFileSync(markerFilePath, 'utf8');
   const lines = content.split('\n').filter((line) => line.trim() !== '');
-  return lines.map((line) => {
+
+  // Separate the self-checksum row (path === '.') from entry lines
+  const checksumRow = lines.find((line) => line.split('|')[0] === SELF_CHECKSUM_PATH);
+  const entryLines = lines.filter((line) => line.split('|')[0] !== SELF_CHECKSUM_PATH);
+
+  if (checksumRow) {
+    const storedHash = checksumRow.split('|')[1] ?? '';
+    const expectedHash = shortenChecksum(hashBuffer(entryLines.join('\n') + '\n'));
+    if (storedHash !== expectedHash) {
+      throw new Error(
+        `Marker integrity check failed: ${markerFilePath} may have been tampered with`,
+      );
+    }
+  }
+
+  return entryLines.map((line) => {
     const fields = line.split('|');
     return {
       path: fields[0] ?? '',
@@ -26,15 +48,17 @@ export async function readMarker(markerFilePath: string): Promise<ManagedFileMet
       packageVersion: fields[2] ?? '',
       kind: fields[3] === 'symlink' ? 'symlink' : 'file',
       ...(fields[4] ? { checksum: fields[4] } : {}),
-      ...(fields[5] === 'mutable' ? { mutable: true as const } : {}),
+      ...(fields[5] === '1' ? { mutable: true as const } : {}),
     };
   });
 }
 
 /**
  * Write managed file entries to a .filedist marker file.
- * Format: path|packageName|packageVersion[|kind[|checksum[|mutable]]]
- * Trailing empty columns are omitted for backward compatibility.
+ * Format: path|packageName|packageVersion|kind|checksum|mutable
+ * mutable column: '1' = mutable, '0' = not mutable.
+ * Trailing columns up to (but not including) the last meaningful one are always written.
+ * A self-checksum row `.|<sha256hex>` is appended after all entry rows.
  * Makes the file read-only after writing.
  */
 export async function writeMarker(
@@ -56,21 +80,24 @@ export async function writeMarker(
   const rows = entries.map((e) => {
     const kindField = e.kind === 'symlink' ? 'symlink' : '';
     const checksumField = e.checksum ?? '';
-    const mutableField = e.mutable ? 'mutable' : '';
+    const mutableField = e.mutable ? '1' : '0';
 
-    // Include only as many trailing fields as needed (omit trailing empty columns)
-    if (mutableField) {
-      return `${e.path}|${e.packageName}|${e.packageVersion}|${kindField}|${checksumField}|${mutableField}`;
-    }
+    // Always include mutable (0/1) when a checksum is present; otherwise omit trailing empty columns
     if (checksumField) {
-      return `${e.path}|${e.packageName}|${e.packageVersion}|${kindField}|${checksumField}`;
+      return `${e.path}|${e.packageName}|${e.packageVersion}|${kindField}|${checksumField}|${mutableField}`;
     }
     if (kindField) {
       return `${e.path}|${e.packageName}|${e.packageVersion}|${kindField}`;
     }
     return `${e.path}|${e.packageName}|${e.packageVersion}`;
   });
-  fs.writeFileSync(markerFilePath, `${rows.join('\n')}\n`, 'utf8');
+  const entryContent = `${rows.join('\n')}\n`;
+  const selfChecksum = shortenChecksum(hashBuffer(entryContent));
+  fs.writeFileSync(
+    markerFilePath,
+    `${entryContent}${SELF_CHECKSUM_PATH}|${selfChecksum}\n`,
+    'utf8',
+  );
   fs.chmodSync(markerFilePath, 0o444);
 }
 

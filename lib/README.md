@@ -407,6 +407,24 @@ The check command reports differences per package:
     + extra:    data/old-file.json
 ```
 
+#### Offline / local-only check
+
+By default `check` installs packages (or uses an already-installed version) to detect *extra* files — files that exist in the package source but were never extracted. If you want a fast, fully offline check that skips all network and install steps, use `--local-only`:
+
+```sh
+npx filedist check --local-only
+```
+
+In this mode filedist reads the `.filedist` marker file for each output directory and verifies:
+
+1. **File checksums** — every non-mutable file listed in the marker is hashed and compared against the checksum recorded at extraction time.
+
+Extra-file detection (files in the source that were never extracted) is skipped because no package source is available. Use `--local-only` when:
+
+- Running in a **CI environment** where the package registry is unavailable or you want to avoid install latency.
+- Checking **air-gapped** or **offline** environments.
+- You only care that previously extracted files have not been **locally tampered with**, and are not concerned about new files added to the upstream package since the last extract.
+
 ### 4. List managed files
 
 ```sh

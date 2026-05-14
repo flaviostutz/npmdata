@@ -9,7 +9,7 @@ import {
   ExecuteResult,
   ManagedFileMetadata,
 } from '../types';
-import { ensureDir, formatDisplayPath, hashFileSync } from '../utils';
+import { ensureDir, formatDisplayPath, hashFileSync, shortenChecksum } from '../utils';
 import { applyContentReplacements } from '../package/content-replacements';
 
 import { writeMarker, markerPath } from './markers';
@@ -131,7 +131,7 @@ export async function execute(
 
     for (const op of [...map.toAdd, ...map.toModify]) {
       // Hash the final file content (after any content replacements applied above)
-      const checksum = hashFileSync(op.destPath);
+      const checksum = shortenChecksum(hashFileSync(op.destPath));
       updatedEntries.push({
         path: op.relPath,
         packageName: pkg.name,

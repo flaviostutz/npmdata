@@ -24,6 +24,7 @@ export async function runCheck(
     entries,
     cwd,
     verbose: parsed.verbose,
+    localOnly: parsed.localOnly,
   });
 
   const hasDrift =

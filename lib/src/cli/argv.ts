@@ -34,6 +34,8 @@ export type ParsedArgv = {
   verbose?: boolean;
   /** --no-save: skip saving config to .filedistrc.yml */
   ignoreConfig?: boolean;
+  /** --local-only: skip package installs/git clones; verify only against .filedist markers */
+  localOnly?: boolean;
 };
 
 export function resolveEffectivePresets(
@@ -140,6 +142,7 @@ export function parseArgv(argv: string[]): ParsedArgv {
     silent: getBoolFlag('--silent'),
     verbose: argv.includes('-v') ? true : verboseFlag,
     ignoreConfig: getBoolFlag('--no-save'),
+    localOnly: getBoolFlag('--local-only'),
   };
 }
 

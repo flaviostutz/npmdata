@@ -53,6 +53,9 @@ Options:
   --files <globs>         Glob patterns for file selection.
   --content-regex <re>    Regex strings for content filtering.
   --managed [bool]        Silently skip unmanaged entries. Use --managed=false.
+  --local-only            Skip all package installs/git clones. Verify only against
+                          .filedist marker checksums (including marker self-integrity check).
+                          Extra-file detection is skipped. Useful for offline/CI environments.
   --presets <tags>        Comma-separated preset tags; only matching entries are checked. Overrides config defaultPresets.
   --all                   Ignore config defaultPresets and check all configured entries.
   --config <file>         Path to a config file (overrides auto-discovered .filedistrc / package.json).

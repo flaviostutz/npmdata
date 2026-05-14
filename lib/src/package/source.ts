@@ -311,7 +311,7 @@ async function resolveGitPackage(
   return {
     source: 'git',
     packageName: target.packageName,
-    packageVersion: revision || target.requestedVersion || 'HEAD',
+    packageVersion: revision ? revision.slice(0, 12) : target.requestedVersion || 'HEAD',
     packagePath: cloneDir,
   };
 }

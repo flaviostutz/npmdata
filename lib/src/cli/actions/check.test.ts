@@ -208,3 +208,26 @@ describe('runCheck — error handling', () => {
     await expect(runCheck(CONFIG, [], '/cwd')).rejects.toThrow('something went wrong');
   });
 });
+
+describe('runCheck — --local-only', () => {
+  it('passes localOnly=true to actionCheck when --local-only flag is given', async () => {
+    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    await runCheck(CONFIG, ['--local-only'], '/cwd');
+    spy.mockRestore();
+    expect(mockActionCheck.mock.calls[0][0].localOnly).toBe(true);
+  });
+
+  it('passes localOnly=undefined to actionCheck when --local-only flag is absent', async () => {
+    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    await runCheck(CONFIG, [], '/cwd');
+    spy.mockRestore();
+    expect(mockActionCheck.mock.calls[0][0].localOnly).toBeUndefined();
+  });
+
+  it('does not call actionCheck with localOnly when --local-only=false', async () => {
+    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    await runCheck(CONFIG, ['--local-only=false'], '/cwd');
+    spy.mockRestore();
+    expect(mockActionCheck.mock.calls[0][0].localOnly).toBe(false);
+  });
+});

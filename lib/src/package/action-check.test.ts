@@ -14,7 +14,7 @@ import { actionCheck } from './action-check';
 import { actionExtract } from './action-extract';
 
 function sha256(content: string): string {
-  return crypto.createHash('sha256').update(content).digest('hex');
+  return crypto.createHash('sha256').update(content).digest('hex').slice(18, 30);
 }
 
 let tmpDir: string;
@@ -42,7 +42,7 @@ describe('actionCheck', () => {
     const content = '# OK';
     fs.writeFileSync(path.join(outputDir, 'guide.md'), content);
 
-    const checksum = crypto.createHash('sha256').update(content).digest('hex');
+    const checksum = crypto.createHash('sha256').update(content).digest('hex').slice(18, 30);
     const markerFile = markerPath(outputDir);
     fs.mkdirSync(path.dirname(markerFile), { recursive: true });
     await writeMarker(markerFile, [

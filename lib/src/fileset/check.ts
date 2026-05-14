@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 import { SelectorConfig, ManagedFileMetadata, CheckResult } from '../types';
-import { hashFile } from '../utils';
+import { hashFile, shortenChecksum } from '../utils';
 
 import { enumeratePackageFiles } from './package-files';
 
@@ -44,7 +44,7 @@ export async function checkFileset(
 
     if (m.checksum) {
       // Compare local file against stored checksum (no source needed)
-      const destHash = await hashFile(destPath);
+      const destHash = shortenChecksum(await hashFile(destPath));
       if (m.checksum !== destHash) {
         result.modified.push(m.path);
       }

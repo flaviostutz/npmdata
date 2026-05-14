@@ -10,7 +10,7 @@ import { ResolvedFile } from '../types';
 import { calculateDiff } from './calculate-diff';
 
 function sha256(content: string): string {
-  return crypto.createHash('sha256').update(content).digest('hex');
+  return crypto.createHash('sha256').update(content).digest('hex').slice(18, 30);
 }
 
 describe('calculateDiff', () => {

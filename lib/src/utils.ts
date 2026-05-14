@@ -56,6 +56,15 @@ export function hashBuffer(content: Buffer | string): string {
 }
 
 /**
+ * Shorten a hex hash to 12 chars taken from position 19 (index 18).
+ * Used to reduce verbosity of stored checksums in .filedist marker files
+ * while still providing integrity protection.
+ */
+export function shortenChecksum(hash: string): string {
+  return hash.slice(18, 30);
+}
+
+/**
  * Synchronous file hash (SHA-256).
  */
 export function hashFileSync(filePath: string): string {

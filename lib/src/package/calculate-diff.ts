@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { ResolvedFile, DiffResult, ManagedFileMetadata } from '../types';
 import { readManagedGitignoreEntries } from '../fileset/gitignore';
-import { hashFile, isBinaryFile, formatDisplayPath } from '../utils';
+import { hashFile, isBinaryFile, formatDisplayPath, shortenChecksum } from '../utils';
 import { readOutputDirMarker } from '../fileset/markers';
 
 import { applyContentReplacementsToBuffer } from './content-replacements';
@@ -218,7 +218,7 @@ async function classifyDesiredFile(
     if (existingEntry?.mutable) {
       // File is intentionally mutable (e.g. extracted with mutable option); skip content check
     } else if (existingEntry?.checksum) {
-      const destHash = await hashFile(destPath);
+      const destHash = shortenChecksum(await hashFile(destPath));
       if (existingEntry.checksum !== destHash) conflictReasons.push('content');
     } else {
       // No stored checksum: marker is from an old extraction; re-extract to repair
