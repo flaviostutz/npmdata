@@ -31,12 +31,19 @@ import { applyContentReplacements } from './content-replacements';
 import { resolveFilesDetailed } from './resolve-files';
 import { calculateDiff } from './calculate-diff';
 import { createSourceRuntime } from './source';
+import { readLockfile, writeLockfile, buildLockfileData } from './lockfile';
 
-export type ExtractOptions = BasicPackageOptions & {
+export type InstallOptions = BasicPackageOptions & {
   onProgress?: (event: ProgressEvent) => void;
+  /**
+   * When true, read .filedist.lock and use it to pin package versions.
+   * Fails if no lock file is found. Does not update the lock file.
+   * When false (default), resolve normally and write/update .filedist.lock.
+   */
+  frozenLockfile?: boolean;
 };
 
-export type ExtractResult = {
+export type InstallResult = {
   added: number;
   modified: number;
   deleted: number;
@@ -44,20 +51,45 @@ export type ExtractResult = {
 };
 
 /**
- * Extract managed files into the output directories.
+ * Install managed files into the output directories.
  *
  * Two-phase approach:
  *  1. resolveFiles — installs packages and builds the complete desired file list.
  *  2. calculateDiff — compares desired files against each output directory.
  *  3. Apply disk changes: delete extra, add missing, resolve conflicts.
+ *
+ * Lock file behaviour:
+ *  - Without frozenLockfile: resolve normally, then write/update .filedist.lock.
+ *  - With frozenLockfile: read .filedist.lock (error if missing), use pinned versions,
+ *    skip lock file update.
  */
 // eslint-disable-next-line complexity
-export async function actionExtract(options: ExtractOptions): Promise<ExtractResult> {
-  const { entries, cwd, verbose = false, onProgress, dryRun } = options;
+export async function actionInstall(options: InstallOptions): Promise<InstallResult> {
+  const { entries, cwd, verbose = false, onProgress, dryRun, frozenLockfile = false } = options;
   const isDryRun = dryRun ?? entries.some((e) => e.output?.dryRun === true);
   const sourceRuntime = createSourceRuntime(cwd, verbose);
 
-  const result: ExtractResult = { added: 0, modified: 0, deleted: 0, skipped: 0 };
+  // ── Lock file handling — resolve locked versions before resolution phase ────
+  let lockedVersions: Map<string, string> | undefined;
+  if (frozenLockfile) {
+    const lockfileData = readLockfile(cwd);
+    if (!lockfileData) {
+      throw new Error(
+        `Lock file ${'.filedist.lock'} not found. ` +
+          `Run 'filedist install' without --frozen-lockfile first.`,
+      );
+    }
+    lockedVersions = new Map(
+      Object.entries(lockfileData.packages).map(([spec, entry]) => [spec, entry.resolvedVersion]),
+    );
+    if (verbose) {
+      console.log(
+        `[verbose] actionInstall: using frozen lock file (${lockedVersions.size} entries)`,
+      );
+    }
+  }
+
+  const result: InstallResult = { added: 0, modified: 0, deleted: 0, skipped: 0 };
   try {
     // ── Phase 1: Resolve desired files ──────────────────────────────────────
     const resolved = await resolveFilesDetailed(entries, {
@@ -65,12 +97,13 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
       verbose,
       onProgress,
       sourceRuntime,
+      lockedVersions,
     });
     const resolvedFiles = resolved.files;
-    const { noSyncOutputDirs, relevantPackagesByOutputDir } = resolved;
+    const { noSyncOutputDirs, relevantPackagesByOutputDir, resolvedPackages } = resolved;
 
     if (verbose) {
-      console.log(`[verbose] actionExtract: resolved ${resolvedFiles.length} desired file(s)`);
+      console.log(`[verbose] actionInstall: resolved ${resolvedFiles.length} desired file(s)`);
     }
 
     // ── Phase 2: Calculate diff ──────────────────────────────────────────────
@@ -84,7 +117,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
     if (verbose) {
       console.log(
-        `[verbose] actionExtract: diff ok=${diff.ok.length} missing=${diff.missing.length}` +
+        `[verbose] actionInstall: diff ok=${diff.ok.length} missing=${diff.missing.length}` +
           ` conflict=${diff.conflict.length} extra=${diff.extra.length}`,
       );
     }
@@ -97,7 +130,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
     // Detect unmanaged-file conflicts before any disk writes.
     if (!isDryRun) {
       if (verbose) {
-        console.log(`[verbose] actionExtract: checking for possible file conflicts...`);
+        console.log(`[verbose] actionInstall: checking for possible file conflicts...`);
       }
       for (const entry of fileConflictEntries) {
         const desired = entry.desired!;
@@ -138,7 +171,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
     // Delete extra managed files
     if (verbose) {
-      console.log(`[verbose] actionExtract: removing extra managed files...`);
+      console.log(`[verbose] actionInstall: removing extra managed files...`);
     }
     for (const entry of diff.extra.filter(
       (diffEntry) =>
@@ -162,7 +195,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
     // Add missing files
     if (verbose) {
-      console.log(`[verbose] actionExtract: adding missing files...`);
+      console.log(`[verbose] actionInstall: adding missing files...`);
     }
     for (const entry of fileMissingEntries) {
       const desired = entry.desired!;
@@ -194,7 +227,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
     // Resolve conflicts
     if (verbose) {
-      console.log(`[verbose] actionExtract: resolving file conflicts...`);
+      console.log(`[verbose] actionInstall: resolving file conflicts...`);
     }
     for (const entry of fileConflictEntries) {
       const desired = entry.desired!;
@@ -225,7 +258,7 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
     // Apply symlinks and content replacements per output directory
     if (verbose) {
-      console.log(`[verbose] actionExtract: applying symlinks and content replacements...`);
+      console.log(`[verbose] actionInstall: applying symlinks and content replacements...`);
     }
     for (const outputDir of outputDirs) {
       const dirFiles = resolvedFiles.filter((f) => f.outputDir === outputDir);
@@ -276,9 +309,20 @@ export async function actionExtract(options: ExtractOptions): Promise<ExtractRes
 
     if (verbose) {
       console.log(
-        `[verbose] actionExtract: complete — added=${result.added} modified=${result.modified}` +
+        `[verbose] actionInstall: complete — added=${result.added} modified=${result.modified}` +
           ` deleted=${result.deleted} skipped=${result.skipped}`,
       );
+    }
+
+    // ── Write/update lock file (only when not frozen) ───────────────────────
+    if (!isDryRun && !frozenLockfile) {
+      const lockfileData = buildLockfileData(resolvedPackages);
+      writeLockfile(cwd, lockfileData);
+      if (verbose) {
+        console.log(
+          `[verbose] actionInstall: lock file updated (${Object.keys(lockfileData.packages).length} package(s))`,
+        );
+      }
     }
 
     return result;

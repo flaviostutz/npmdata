@@ -41,7 +41,7 @@ describe('cli', () => {
     fs.rmSync(tmpDir, { recursive: true });
   });
 
-  it('defaults to extract command when no command given', async () => {
+  it('defaults to install command when no command given', async () => {
     const outputDir = path.join(tmpDir, 'output');
     await cli(
       ['node', 'filedist', '--packages', PKG_NAME, '--output', outputDir, '--gitignore=false'],
@@ -51,7 +51,7 @@ describe('cli', () => {
     expect(fs.existsSync(path.join(outputDir, 'docs/api.md'))).toBe(true);
   }, 60_000);
 
-  it('defaults to extract when first arg starts with -', async () => {
+  it('defaults to install when first arg starts with -', async () => {
     const outputDir = path.join(tmpDir, 'output-flag');
     await cli(
       ['node', 'filedist', '--packages', PKG_NAME, '--output', outputDir, '--gitignore=false'],
@@ -60,13 +60,13 @@ describe('cli', () => {
     expect(fs.existsSync(path.join(outputDir, 'docs/guide.md'))).toBe(true);
   }, 60_000);
 
-  it('routes to extract command explicitly', async () => {
+  it('routes to install command explicitly', async () => {
     const outputDir = path.join(tmpDir, 'output-extract');
     await cli(
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--packages',
         PKG_NAME,
         '--output',
@@ -78,7 +78,7 @@ describe('cli', () => {
     expect(fs.existsSync(path.join(outputDir, 'docs/guide.md'))).toBe(true);
   }, 60_000);
 
-  it('routes to check command — reports in-sync after extract', async () => {
+  it('routes to check command — reports in-sync after install', async () => {
     const outputDir = path.join(tmpDir, 'output-check');
 
     // Extract first
@@ -86,7 +86,7 @@ describe('cli', () => {
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--packages',
         PKG_NAME,
         '--output',
@@ -117,7 +117,7 @@ describe('cli', () => {
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--packages',
         PKG_NAME,
         '--output',
@@ -151,7 +151,7 @@ describe('cli', () => {
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--packages',
         PKG_NAME,
         '--output',
@@ -177,7 +177,7 @@ describe('cli', () => {
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--packages',
         PKG_NAME,
         '--output',
@@ -219,7 +219,7 @@ describe('cli', () => {
     await cli(['node', 'filedist', '--help'], tmpDir);
     spy.mockRestore();
     expect(lines.join('\n')).toMatch(/usage: filedist \[command] \[options]/i);
-    expect(lines.join('\n')).toMatch(/extract \(default\)/i);
+    expect(lines.join('\n')).toMatch(/install \(default\)/i);
     expect(lines.join('\n')).toMatch(/check/i);
     expect(lines.join('\n')).toMatch(/presets/i);
     expect(lines.join('\n')).not.toMatch(/--packages/);
@@ -272,7 +272,7 @@ describe('cli', () => {
     );
 
     // No .filedistrc in tmpDir — config comes only from --config
-    await cli(['node', 'filedist', 'extract', '--config', configFile], tmpDir);
+    await cli(['node', 'filedist', 'install', '--config', configFile], tmpDir);
 
     expect(fs.existsSync(path.join(outputDir, 'docs/guide.md'))).toBe(true);
     expect(fs.existsSync(path.join(outputDir, 'docs/api.md'))).toBe(true);
@@ -299,7 +299,7 @@ describe('cli', () => {
       }),
     );
 
-    await cli(['node', 'filedist', 'extract', '--config', configFile], tmpDir);
+    await cli(['node', 'filedist', 'install', '--config', configFile], tmpDir);
 
     // Only outputCustom should be populated
     expect(fs.existsSync(path.join(outputCustom, 'docs/guide.md'))).toBe(true);
@@ -317,7 +317,7 @@ describe('cli', () => {
       }),
     );
 
-    await cli(['node', 'filedist', 'extract', '--config', 'relative-cfg.json'], tmpDir);
+    await cli(['node', 'filedist', 'install', '--config', 'relative-cfg.json'], tmpDir);
 
     expect(fs.existsSync(path.join(outputDir, 'docs/guide.md'))).toBe(true);
   }, 60_000);
@@ -348,12 +348,12 @@ describe('cli', () => {
       }),
     );
 
-    await cli(['node', 'filedist', 'extract', '--config', configFile], tmpDir);
+    await cli(['node', 'filedist', 'install', '--config', configFile], tmpDir);
 
     expect(fs.existsSync(path.join(defaultOutput, 'docs/guide.md'))).toBe(true);
     expect(fs.existsSync(path.join(overrideOutput, 'docs/api.md'))).toBe(false);
 
-    await cli(['node', 'filedist', 'extract', '--config', configFile, '--presets', 'api'], tmpDir);
+    await cli(['node', 'filedist', 'install', '--config', configFile, '--presets', 'api'], tmpDir);
 
     expect(fs.existsSync(path.join(overrideOutput, 'docs/api.md'))).toBe(true);
   }, 60_000);
@@ -384,7 +384,7 @@ describe('cli', () => {
       }),
     );
 
-    await cli(['node', 'filedist', 'extract', '--config', configFile, '--all'], tmpDir);
+    await cli(['node', 'filedist', 'install', '--config', configFile, '--all'], tmpDir);
 
     expect(fs.existsSync(path.join(defaultOutput, 'docs/guide.md'))).toBe(true);
     expect(fs.existsSync(path.join(allOutput, 'docs/api.md'))).toBe(true);
@@ -404,7 +404,7 @@ describe('cli', () => {
     const spy = jest.spyOn(console, 'error').mockImplementation((...args) => {
       errors.push(args.join(' '));
     });
-    const code = await cli(['node', 'filedist', 'extract', '--config', configFile], tmpDir);
+    const code = await cli(['node', 'filedist', 'install', '--config', configFile], tmpDir);
     spy.mockRestore();
 
     expect(code).toBe(1);
@@ -425,7 +425,7 @@ describe('cli', () => {
     const spy = jest.spyOn(console, 'error').mockImplementation((...args) => {
       errors.push(args.join(' '));
     });
-    const code = await cli(['node', 'filedist', 'extract', '--config', configFile], tmpDir);
+    const code = await cli(['node', 'filedist', 'install', '--config', configFile], tmpDir);
     spy.mockRestore();
 
     expect(code).toBe(1);
@@ -451,7 +451,7 @@ describe('cli', () => {
       `sets:\n  - package: ${PKG_NAME}\n    output:\n      path: ${outputLocal}\n      gitignore: false\n`,
     );
 
-    await cli(['node', 'filedist', 'extract'], tmpDir);
+    await cli(['node', 'filedist', 'install'], tmpDir);
 
     // Only the local config output should be populated
     expect(fs.existsSync(path.join(outputLocal, 'docs/guide.md'))).toBe(true);
@@ -477,7 +477,7 @@ describe('cli', () => {
       }),
     );
 
-    await cli(['node', 'filedist', 'extract', '--config', configFile], tmpDir);
+    await cli(['node', 'filedist', 'install', '--config', configFile], tmpDir);
 
     // Only the explicit config output should be populated
     expect(fs.existsSync(path.join(outputExplicit, 'docs/guide.md'))).toBe(true);
@@ -493,7 +493,7 @@ describe('cli', () => {
       `sets:\n  - package: ${PKG_NAME}\n    output:\n      path: ${outputStandard}\n      gitignore: false\n`,
     );
 
-    await cli(['node', 'filedist', 'extract'], tmpDir);
+    await cli(['node', 'filedist', 'install'], tmpDir);
 
     expect(fs.existsSync(path.join(outputStandard, 'docs/guide.md'))).toBe(true);
   }, 60_000);

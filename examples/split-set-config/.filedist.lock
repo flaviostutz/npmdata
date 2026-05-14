@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "packages": {
+    "example-files-package": {
+      "source": "npm",
+      "spec": "example-files-package",
+      "resolvedVersion": "1.0.0"
+    },
+    "eslint@8": {
+      "source": "npm",
+      "spec": "eslint@8",
+      "resolvedVersion": "8.57.1"
+    }
+  }
+}

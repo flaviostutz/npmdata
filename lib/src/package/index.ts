@@ -1,6 +1,6 @@
 // Public package-layer API
-export { actionExtract } from './action-extract';
-export type { ExtractOptions, ExtractResult } from './action-extract';
+export { actionInstall } from './action-install';
+export type { InstallOptions, InstallResult } from './action-install';
 
 export { actionCheck } from './action-check';
 export type { CheckOptions, CheckSummary } from './action-check';

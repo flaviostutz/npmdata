@@ -138,7 +138,7 @@ On Windows, use the same format with a drive letter, for example `git:file:///C:
 Once the consumer has a `.filedistrc`, the workflow is simple:
 
 ```sh
-npx filedist extract
+npx filedist install
 npx filedist check
 npx filedist purge
 npx filedist presets
@@ -191,7 +191,7 @@ For example, changing from `v1.0.0` to `v1.1.0` is just a config edit:
 Then run:
 
 ```sh
-npx filedist extract
+npx filedist install
 npx filedist check
 ```
 
@@ -266,7 +266,7 @@ Consumer repo `.filedistrc`:
 Consumer commands:
 
 ```sh
-npx filedist extract
+npx filedist install
 npx filedist check
 ```
 

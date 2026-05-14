@@ -1,7 +1,10 @@
 // Public library exports for filedist v2
 
-export { actionExtract } from './package/action-extract';
-export type { ExtractOptions, ExtractResult } from './package/action-extract';
+export { actionInstall } from './package/action-install';
+export type { InstallOptions, InstallResult } from './package/action-install';
+
+export { readLockfile, writeLockfile, buildLockfileData } from './package/lockfile';
+export type { LockfileData, LockfilePackageEntry } from './package/lockfile';
 
 export { actionCheck } from './package/action-check';
 export type { CheckOptions, CheckSummary } from './package/action-check';

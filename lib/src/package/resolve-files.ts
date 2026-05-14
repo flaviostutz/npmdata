@@ -20,12 +20,23 @@ export type ResolveOptions = {
   verbose?: boolean;
   onProgress?: (event: ProgressEvent) => void;
   sourceRuntime?: SourceRuntime;
+  /**
+   * When provided, pins each matching package spec to an exact version instead
+   * of resolving from npm/git registries.
+   * Key: original spec string (e.g. "eslint@^8"). Value: exact pinned version.
+   */
+  lockedVersions?: Map<string, string>;
 };
 
 export type ResolveFilesDetailedResult = {
   files: ResolvedFile[];
   relevantPackagesByOutputDir: Map<string, Set<string>>;
   noSyncOutputDirs: Set<string>;
+  /**
+   * All packages resolved during traversal.
+   * Key: original spec string. Value: source kind and exact resolved version.
+   */
+  resolvedPackages: Map<string, { source: 'npm' | 'git'; resolvedVersion: string }>;
 };
 
 function addRelevantPackage(
@@ -84,6 +95,9 @@ export async function resolveFilesDetailed(
   const relevantPackagesByOutputDir = new Map<string, Set<string>>();
   const noSyncOutputDirs = new Set<string>();
   const sourceRuntime = options.sourceRuntime ?? createSourceRuntime(options.cwd, options.verbose);
+  if (options.lockedVersions) {
+    sourceRuntime.setLockedVersions(options.lockedVersions);
+  }
   const raw = await resolveFilesInternal(
     entries,
     { path: '.' },
@@ -103,6 +117,7 @@ export async function resolveFilesDetailed(
     files: deduplicateAndCheckConflicts(raw),
     relevantPackagesByOutputDir,
     noSyncOutputDirs,
+    resolvedPackages: sourceRuntime.getResolvedPackages(),
   };
 }
 

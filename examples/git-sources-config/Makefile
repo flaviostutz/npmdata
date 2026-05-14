@@ -42,7 +42,7 @@ test: clean install prepare-repos
 
 	# --- Test 1: config from package.json "filedist" key ---
 	make prepare-config
-	pnpm exec filedist extract
+	pnpm exec filedist install
 	test -e output/docs/guide.md
 	test -e output/nested/child/data.json
 	test -e output/.filedist
@@ -65,7 +65,7 @@ test: clean install prepare-repos
 	make prepare-config
 	jq '.filedist' package.json > .filedistrc
 	jq 'del(.filedist)' package.json > package.json.tmp && mv package.json.tmp package.json
-	pnpm exec filedist extract
+	pnpm exec filedist install
 	test -e output/docs/guide.md
 	test -e output/nested/child/data.json
 	test -e output/.filedist

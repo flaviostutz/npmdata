@@ -72,13 +72,13 @@ Consumer calls `extract --presets basic`. Result:
 **CLI equivalences**
 
 ```
-npx filedist extract --packages myorg-kit
+npx filedist install --packages myorg-kit
 npx myorg-kit extract
-npx filedist extract   # (with .filedistrc set pointing to myorg-kit)
+npx filedist install   # (with .filedistrc set pointing to myorg-kit)
 ```
 
 ```
-npx filedist extract --packages myorg-kit --presets basic
+npx filedist install --packages myorg-kit --presets basic
 npx myorg-kit extract --presets basic
 ```
 

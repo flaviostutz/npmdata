@@ -6,14 +6,14 @@ Publish folders as npm packages or git repositories and extract them in any work
 
 ```sh
 # extract files from any npm package into a local directory
-npx filedist extract --packages my-shared-assets@^2.0.0 --output ./data
+npx filedist install --packages my-shared-assets@^2.0.0 --output ./data
 
 # extract directly from git
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs
 ```
 
 ```typescript
-import { actionExtract } from 'filedist';
+import { actionInstall } from 'filedist';
 import type { FiledistExtractEntry } from 'filedist';
 
 const entries: FiledistExtractEntry[] = [
@@ -23,7 +23,7 @@ const entries: FiledistExtractEntry[] = [
     output: { path: './xdrs' },
   },
 ];
-const result = await actionExtract({ entries, cwd: process.cwd() });
+const result = await actionInstall({ entries, cwd: process.cwd() });
 console.log(result.added, result.modified, result.deleted);
 ```
 
@@ -52,16 +52,16 @@ Pull files directly without any setup:
 
 ```sh
 # npm package examples
-npx filedist extract --packages my-shared-assets@^2.0.0 --output ./data
-npx filedist extract --packages my-shared-assets --files "**/*.md" --output ./docs
-npx filedist extract --packages my-shared-assets --content-regex "env: production" --output ./configs
-npx filedist extract --packages my-shared-assets --output ./data --dry-run
+npx filedist install --packages my-shared-assets@^2.0.0 --output ./data
+npx filedist install --packages my-shared-assets --files "**/*.md" --output ./docs
+npx filedist install --packages my-shared-assets --content-regex "env: production" --output ./configs
+npx filedist install --packages my-shared-assets --output ./data --dry-run
 
 # git source examples
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --files "docs/**/*.md" --output ./docs
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --content-regex "Decision Outcome" --output ./filtered-docs
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --dry-run
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --files "docs/**/*.md" --output ./docs
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --content-regex "Decision Outcome" --output ./filtered-docs
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --dry-run
 ```
 
 ---
@@ -101,7 +101,7 @@ Declare sources in `.filedistrc` (or `package.json`) and run `extract` without `
 For a local Windows path, use the same `file://` form with a drive letter, for example `git:file:///C:/work/local-repo@v2.0.0`.
 
 ```sh
-npx filedist extract   # reads config, extracts all sets or only defaultPresets when defined
+npx filedist install   # reads config, extracts all sets or only defaultPresets when defined
 npx filedist check     # verifies files are in sync for the same effective set selection
 npx filedist purge     # removes managed files for the same effective set selection
 ```
@@ -165,8 +165,8 @@ shared-assets-repo/
 Commit and tag that repository, then consume it like any other source:
 
 ```sh
-npx filedist extract --packages git:github.com/my-org/shared-assets-repo@v1.0.0 --output ./assets
-npx filedist extract --packages git:github.com/my-org/shared-assets-repo@v1.0.0 --output ./assets --presets runtime
+npx filedist install --packages git:github.com/my-org/shared-assets-repo@v1.0.0 --output ./assets
+npx filedist install --packages git:github.com/my-org/shared-assets-repo@v1.0.0 --output ./assets --presets runtime
 ```
 
 In this setup, filedist clones the repository, reads the root `.filedistrc`, extracts the repo's own files from the self entries that omit `package`, and then follows any external `sets` entries recursively.
@@ -253,21 +253,21 @@ npx my-org-configs extract --output ./local-data --presets prod
 ## All extract options
 
 ```sh
-npx filedist extract --packages my-pkg@^2.0.0 --output ./data   # specific version
-npx filedist extract --packages "pkg-a,pkg-b@1.x" --output ./data  # multiple packages
-npx filedist extract --packages my-pkg --output ./data --force   # overwrite existing files
-npx filedist extract --packages my-pkg --output ./data --managed=false  # skip tracking
-npx filedist extract --packages my-pkg@latest --output ./data --upgrade  # force reinstall
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs
-npx filedist extract --packages "git:github.com/org/repo-a@v1.0.0,git:file:///tmp/repo-b@main" --output ./git-data  # multiple git sources
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --force   # overwrite existing files
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --managed=false  # skip tracking
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@main --output ./xdrs --upgrade  # force a fresh clone/check-out
-npx filedist extract --packages my-pkg --output ./data --gitignore=false  # skip .gitignore
-npx filedist extract --packages my-pkg --output ./data --dry-run  # preview only
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --gitignore=false  # skip .gitignore
-npx filedist extract --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --dry-run  # preview only
-npx filedist extract --packages my-pkg --output ./data --nosync  # keep stale managed files on disk
+npx filedist install --packages my-pkg@^2.0.0 --output ./data   # specific version
+npx filedist install --packages "pkg-a,pkg-b@1.x" --output ./data  # multiple packages
+npx filedist install --packages my-pkg --output ./data --force   # overwrite existing files
+npx filedist install --packages my-pkg --output ./data --managed=false  # skip tracking
+npx filedist install --packages my-pkg@latest --output ./data --upgrade  # force reinstall
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs
+npx filedist install --packages "git:github.com/org/repo-a@v1.0.0,git:file:///tmp/repo-b@main" --output ./git-data  # multiple git sources
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --force   # overwrite existing files
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --managed=false  # skip tracking
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@main --output ./xdrs --upgrade  # force a fresh clone/check-out
+npx filedist install --packages my-pkg --output ./data --gitignore=false  # skip .gitignore
+npx filedist install --packages my-pkg --output ./data --dry-run  # preview only
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --gitignore=false  # skip .gitignore
+npx filedist install --packages git:github.com/flaviostutz/xdrs-core@1.3.0 --output ./xdrs --dry-run  # preview only
+npx filedist install --packages my-pkg --output ./data --nosync  # keep stale managed files on disk
 ```
 
 `extract` logs every file change:
@@ -368,7 +368,7 @@ consumer project
             └─ raw-assets     (leaf package)
 ```
 
-Running `npx filedist extract --packages my-org-configs --output ./data` extracts files from every package in the chain, not just `my-org-configs` itself. Running `check` or `purge` with the same arguments mirrors what `extract` originally covered.
+Running `npx filedist install --packages my-org-configs --output ./data` extracts files from every package in the chain, not just `my-org-configs` itself. Running `check` or `purge` with the same arguments mirrors what `extract` originally covered.
 
 For git sources, filedist clones each repository into `.filedist-tmp` under the working directory, adds that path to `.gitignore` if needed, reads nested `filedist` config from the cloned repository, and removes `.filedist-tmp` after the command finishes.
 
@@ -468,7 +468,7 @@ Presets:  --config <file>       Explicit config file path (overrides auto-discov
 ## Programmatic API
 
 ```typescript
-import { actionExtract, actionCheck, actionList, actionPurge } from 'filedist';
+import { actionInstall, actionCheck, actionList, actionPurge } from 'filedist';
 import type { FiledistExtractEntry, ProgressEvent } from 'filedist';
 
 const entries: FiledistExtractEntry[] = [
@@ -477,11 +477,11 @@ const entries: FiledistExtractEntry[] = [
 const cwd = process.cwd();
 
 // extract files
-const result = await actionExtract({ entries, cwd });
+const result = await actionInstall({ entries, cwd });
 console.log(result.added, result.modified, result.deleted);
 
 // track progress
-await actionExtract({
+await actionInstall({
   entries,
   cwd,
   onProgress: (event: ProgressEvent) => {
@@ -548,7 +548,7 @@ Set `defaultPresets` at the top level of your config to make `extract`, `check`,
 }
 ```
 
-Running `npx filedist extract` with that config behaves the same as `npx filedist extract --presets prod,reports`. Passing `--presets` explicitly overrides `defaultPresets` for that command.
+Running `npx filedist install` with that config behaves the same as `npx filedist install --presets prod,reports`. Passing `--presets` explicitly overrides `defaultPresets` for that command.
 
 ---
 

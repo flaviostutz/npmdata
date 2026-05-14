@@ -10,7 +10,7 @@ import {
 import { FiledistConfig } from '../types';
 
 import { printUsage, printVersion } from './usage';
-import { runExtract } from './actions/extract';
+import { runInstall } from './actions/install';
 import { runCheck } from './actions/check';
 import { runList } from './actions/list';
 import { runPurge } from './actions/purge';
@@ -18,7 +18,7 @@ import { runInit } from './actions/init';
 import { runPresets } from './actions/presets';
 import { parseArgv, buildEntriesFromArgv } from './argv';
 
-const KNOWN_COMMANDS = new Set(['extract', 'check', 'list', 'purge', 'init', 'presets']);
+const KNOWN_COMMANDS = new Set(['install', 'check', 'list', 'purge', 'init', 'presets']);
 
 /**
  * Top-level CLI router.
@@ -52,8 +52,8 @@ export async function cli(argv: string[], cwd?: string, configSearchCwd?: string
     action = firstArg;
     cmdArgs = args.slice(1);
   } else {
-    // Default to extract
-    action = 'extract';
+    // Default to install
+    action = 'install';
     cmdArgs = args;
   }
 
@@ -140,8 +140,8 @@ async function dispatch(
   cwd: string,
 ): Promise<void> {
   switch (action) {
-    case 'extract':
-      await runExtract(config, cmdArgs, cwd);
+    case 'install':
+      await runInstall(config, cmdArgs, cwd);
       break;
     case 'check':
       await runCheck(config, cmdArgs, cwd);

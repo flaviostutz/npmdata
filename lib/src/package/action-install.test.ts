@@ -8,13 +8,13 @@ import { MARKER_FILE } from '../fileset/constants';
 import { ProgressEvent } from '../types';
 
 import { actionCheck } from './action-check';
-import { actionExtract } from './action-extract';
+import { actionInstall } from './action-install';
 
-describe('actionExtract', () => {
+describe('actionInstall', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'v2-action-extract-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'v2-action-install-test-'));
   });
 
   afterEach(() => {
@@ -50,7 +50,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [{ package: 'my-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -65,7 +65,7 @@ describe('actionExtract', () => {
     await installMockPackage('marker-pkg', '1.0.0', { 'src/index.ts': 'export {}' }, tmpDir);
 
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'marker-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -80,7 +80,7 @@ describe('actionExtract', () => {
     await installMockPackage('symlink-pkg', '1.0.0', { 'docs/guide.md': '# Guide' }, tmpDir);
 
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'symlink-pkg',
@@ -107,7 +107,7 @@ describe('actionExtract', () => {
     await installMockPackage('symlink-bump-pkg', '1.0.0', { 'docs/guide.md': '# Guide' }, tmpDir);
 
     const outputDir = path.join(tmpDir, 'output-bump');
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'symlink-bump-pkg',
@@ -125,7 +125,7 @@ describe('actionExtract', () => {
     const before = fs.lstatSync(linkPath);
 
     await installMockPackage('symlink-bump-pkg', '1.0.1', { 'docs/guide.md': '# Guide' }, tmpDir);
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'symlink-bump-pkg',
@@ -172,7 +172,7 @@ describe('actionExtract', () => {
       },
     ]);
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'symlink-stale-pkg',
@@ -199,7 +199,7 @@ describe('actionExtract', () => {
     await installMockPackage('dry-pkg', '1.0.0', { 'docs/guide.md': '# Guide' }, tmpDir);
 
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [
         { package: 'dry-pkg', output: { path: outputDir, dryRun: true, gitignore: false } },
       ],
@@ -218,7 +218,7 @@ describe('actionExtract', () => {
     fs.mkdirSync(outputDir, { recursive: true });
     fs.writeFileSync(path.join(outputDir, 'guide.md'), 'user content');
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         { package: 'force-pkg', output: { path: outputDir, force: true, gitignore: false } },
       ],
@@ -237,7 +237,7 @@ describe('actionExtract', () => {
     fs.writeFileSync(path.join(outputDir, 'guide.md'), 'user content');
 
     await expect(
-      actionExtract({
+      actionInstall({
         entries: [{ package: 'conflict-pkg', output: { path: outputDir, gitignore: false } }],
 
         cwd: tmpDir,
@@ -252,7 +252,7 @@ describe('actionExtract', () => {
     fs.mkdirSync(outputDir, { recursive: true });
     fs.writeFileSync(path.join(outputDir, 'guide.md'), 'user content');
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         { package: 'keep-pkg', output: { path: outputDir, mutable: true, gitignore: false } },
       ],
@@ -272,12 +272,12 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output-nosync');
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'nosync-pkg', output: { path: outputDir, gitignore: false } }],
       cwd: tmpDir,
     });
 
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: 'nosync-pkg',
@@ -306,7 +306,7 @@ describe('actionExtract', () => {
 
     // Passing the same entry twice should result in extraction happening only once
     const outputDir = path.join(tmpDir, 'output');
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         { package: 'circ-pkg', output: { path: outputDir, gitignore: false } },
         { package: 'circ-pkg', output: { path: outputDir, gitignore: false } },
@@ -344,7 +344,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: 'recursive-main',
@@ -388,7 +388,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'git-output');
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: `git:${parentRepo.repoUrl}@v2.0.0`,
@@ -420,7 +420,7 @@ describe('actionExtract', () => {
     const outputDir = path.join(tmpDir, 'output-tl');
 
     // Extract only the entry tagged with 'docs'
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: 'tl-docs-pkg',
@@ -478,7 +478,7 @@ describe('actionExtract', () => {
 
     // Extract with selector.presets: ['docs'] — only the docs nested set should be pulled.
     // preset-main has no self-referential set, so its own files (main.md) must NOT appear.
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'preset-main',
@@ -536,7 +536,7 @@ describe('actionExtract', () => {
     const outputDir = path.join(tmpDir, 'output');
 
     // Extracting with 'docs' preset should only pull docs/** via the self-ref set
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: 'self-ref-pkg',
@@ -587,7 +587,7 @@ describe('actionExtract', () => {
     const outputDir = path.join(tmpDir, 'output');
 
     // Extracting with both presets should pull both file sets
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: 'multi-preset-pkg',
@@ -619,7 +619,7 @@ describe('actionExtract', () => {
 
     const outputDir = path.join(tmpDir, 'output');
     await expect(
-      actionExtract({
+      actionInstall({
         entries: [
           {
             package: 'no-match-pkg',
@@ -637,7 +637,7 @@ describe('actionExtract', () => {
     // First extraction
     await installMockPackage('modify-pkg', '1.0.0', { 'doc.md': '# v1' }, tmpDir);
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'modify-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -649,7 +649,7 @@ describe('actionExtract', () => {
     fs.writeFileSync(pkgFile, '# v2 changed content');
 
     const events: string[] = [];
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'modify-pkg',
@@ -679,7 +679,7 @@ describe('actionExtract', () => {
 
     const outputDir = path.join(tmpDir, 'output');
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'example-files-package',
@@ -736,7 +736,7 @@ describe('actionExtract', () => {
 
   it('throws when entry is missing package field', async () => {
     await expect(
-      actionExtract({
+      actionInstall({
         entries: [{ package: '', output: { path: 'out' } }],
 
         cwd: tmpDir,
@@ -746,7 +746,7 @@ describe('actionExtract', () => {
 
   it('defaults output.path to cwd when omitted', async () => {
     await installMockPackage('default-out-pkg', '1.0.0', { 'file.md': '# hi' }, tmpDir);
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [{ package: 'default-out-pkg' }],
 
       cwd: tmpDir,
@@ -756,7 +756,7 @@ describe('actionExtract', () => {
   }, 60_000);
 
   it('returns zero counts for empty entries', async () => {
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [],
 
       cwd: tmpDir,
@@ -777,7 +777,7 @@ describe('actionExtract', () => {
 
     // Should not throw even though guide.md is an unmanaged conflict
     await expect(
-      actionExtract({
+      actionInstall({
         entries: [
           {
             package: 'unmanaged-pkg',
@@ -799,7 +799,7 @@ describe('actionExtract', () => {
     const outputDir = path.join(tmpDir, 'output');
     const events: string[] = [];
 
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'events-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -817,7 +817,7 @@ describe('actionExtract', () => {
     const outputDir = path.join(tmpDir, 'output-flags');
     const events: ProgressEvent[] = [];
 
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'event-flags-pkg', output: { path: outputDir } }],
       cwd: tmpDir,
       onProgress: (e) => events.push(e),
@@ -837,7 +837,7 @@ describe('actionExtract', () => {
     const outputDir = path.join(tmpDir, 'output');
 
     // First extraction
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'skip-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -845,7 +845,7 @@ describe('actionExtract', () => {
 
     const events: string[] = [];
     // Second extraction without changes — file should be skipped
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'skip-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -862,7 +862,7 @@ describe('actionExtract', () => {
     const outputA = path.join(tmpDir, 'out-a');
     const outputB = path.join(tmpDir, 'out-b');
 
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         { package: 'multi-a', output: { path: outputA, gitignore: false } },
         { package: 'multi-b', output: { path: outputB, gitignore: false } },
@@ -882,7 +882,7 @@ describe('actionExtract', () => {
     const linkTarget = path.join(tmpDir, 'links');
     fs.mkdirSync(linkTarget, { recursive: true });
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'dryrun-sym-pkg',
@@ -913,7 +913,7 @@ describe('actionExtract', () => {
       tmpDir,
     );
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'delete-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -926,7 +926,7 @@ describe('actionExtract', () => {
     fs.rmSync(path.join(pkgDir, 'remove.md'));
 
     const events: string[] = [];
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [{ package: 'delete-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -947,7 +947,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: 'selector-pkg',
@@ -1024,7 +1024,7 @@ describe('actionExtract', () => {
       'unmanaged pre-existing content',
     );
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'merge-main',
@@ -1072,7 +1072,7 @@ describe('actionExtract', () => {
     fs.writeFileSync(path.join(outputDir, 'conflict.md'), 'user content');
 
     await expect(
-      actionExtract({
+      actionInstall({
         entries: [
           { package: 'rollback-pkg', output: { path: outputDir, gitignore: false } },
           { package: 'bad-pkg', output: { path: outputDir, gitignore: false } },
@@ -1109,7 +1109,7 @@ describe('actionExtract', () => {
 
     const outputDir = path.join(tmpDir, 'output');
     // parent dryRun: true — no files written for main OR dep
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'dryrun-main',
@@ -1151,7 +1151,7 @@ describe('actionExtract', () => {
     fs.writeFileSync(path.join(outputDir, 'dep-out', 'dep.md'), 'existing user content');
 
     // parent mutable: true cascades to dep
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'keepex-main',
@@ -1196,7 +1196,7 @@ describe('actionExtract', () => {
     fs.writeFileSync(path.join(outputDir, 'dep-out', 'dep.md'), 'unmanaged old content');
 
     // Parent has no force set; dep's force: true is preserved via `undefined ?? true`
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'depforce-main',
@@ -1227,7 +1227,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'unmngcasc-main',
@@ -1269,7 +1269,7 @@ describe('actionExtract', () => {
 
     const outputDir = path.join(tmpDir, 'output');
     // parent leaves unmanaged undefined — dep's own value must survive via `undefined ?? true`
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'unmngdep-main', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -1304,7 +1304,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [
         // parent explicitly disables gitignore — must cascade to dep
         { package: 'gitcasc-main', output: { path: outputDir, gitignore: false } },
@@ -1348,7 +1348,7 @@ describe('actionExtract', () => {
     const mainLinksDir = path.join(tmpDir, 'main-links');
     fs.mkdirSync(mainLinksDir, { recursive: true });
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'symsub-main',
@@ -1411,7 +1411,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'level1-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -1437,7 +1437,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output');
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'license-pkg', output: { path: outputDir, gitignore: false } }],
 
       cwd: tmpDir,
@@ -1451,7 +1451,7 @@ describe('actionExtract', () => {
     await installMockPackage('verbose-extract-pkg', '1.0.0', { 'guide.md': '# Guide' }, tmpDir);
     const outputDir = path.join(tmpDir, 'output-verbose');
 
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [{ package: 'verbose-extract-pkg', output: { path: outputDir, gitignore: false } }],
       cwd: tmpDir,
       verbose: true,
@@ -1471,7 +1471,7 @@ describe('actionExtract', () => {
     const outputDir = path.join(tmpDir, 'output-verbose-re');
 
     // First extraction with verbose
-    await actionExtract({
+    await actionInstall({
       entries: [
         { package: 'verbose-reextract-pkg', output: { path: outputDir, gitignore: false } },
       ],
@@ -1491,7 +1491,7 @@ describe('actionExtract', () => {
     fs.writeFileSync(keepFile, '# Keep v2');
 
     const events: string[] = [];
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [
         {
           package: 'verbose-reextract-pkg',
@@ -1526,7 +1526,7 @@ describe('actionExtract', () => {
     );
 
     const outputDir = path.join(tmpDir, 'output-verbose-rec');
-    const result = await actionExtract({
+    const result = await actionInstall({
       entries: [{ package: 'verbose-main-rec', output: { path: outputDir, gitignore: false } }],
       cwd: tmpDir,
       verbose: true,
@@ -1557,7 +1557,7 @@ describe('actionExtract', () => {
     fs.writeFileSync(path.join(outputDir, 'conflict.md'), 'user unmanaged content');
 
     await expect(
-      actionExtract({
+      actionInstall({
         entries: [
           { package: 'conflict-verbose-a', output: { path: outputDir, gitignore: false } },
           { package: 'conflict-verbose-b', output: { path: outputDir, gitignore: false } },
@@ -1572,4 +1572,116 @@ describe('actionExtract', () => {
     // The user's unmanaged file should remain
     expect(fs.existsSync(path.join(outputDir, 'conflict.md'))).toBe(true);
   }, 90000);
+});
+
+describe('actionInstall — lock file', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'v2-action-install-lock-test-'));
+  });
+
+  afterEach(() => {
+    const makeWritable = (dir: string): void => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir)) {
+        const fullPath = path.join(dir, entry);
+        try {
+          const stat = fs.lstatSync(fullPath);
+          if (!stat.isSymbolicLink()) {
+            fs.chmodSync(fullPath, 0o755);
+            if (stat.isDirectory()) makeWritable(fullPath);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    makeWritable(tmpDir);
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it('writes .filedist.lock after a successful install', async () => {
+    const PKG = 'lock-write-pkg';
+    await installMockPackage(PKG, '1.2.3', { 'data/file.txt': 'hello' }, tmpDir);
+    const outputDir = path.join(tmpDir, 'output');
+    await actionInstall({
+      entries: [{ package: PKG, output: { path: outputDir, gitignore: false } }],
+      cwd: tmpDir,
+    });
+    const lockPath = path.join(tmpDir, '.filedist.lock');
+    expect(fs.existsSync(lockPath)).toBe(true);
+    const lockData = JSON.parse(fs.readFileSync(lockPath).toString());
+    expect(lockData.lockfileVersion).toBe(1);
+    expect(lockData.packages[PKG]).toBeDefined();
+    expect(lockData.packages[PKG].resolvedVersion).toBe('1.2.3');
+    expect(lockData.packages[PKG].source).toBe('npm');
+  }, 60_000);
+
+  it('does not write .filedist.lock on dry-run', async () => {
+    const PKG = 'lock-dryrun-pkg';
+    await installMockPackage(PKG, '1.0.0', { 'data/file.txt': 'hello' }, tmpDir);
+    const outputDir = path.join(tmpDir, 'output');
+    await actionInstall({
+      entries: [{ package: PKG, output: { path: outputDir, gitignore: false, dryRun: true } }],
+      cwd: tmpDir,
+    });
+    expect(fs.existsSync(path.join(tmpDir, '.filedist.lock'))).toBe(false);
+  }, 60_000);
+
+  it('throws when --frozen-lockfile is set but .filedist.lock is missing', async () => {
+    const PKG = 'lock-frozen-missing-pkg';
+    await installMockPackage(PKG, '1.0.0', { 'data/file.txt': 'hello' }, tmpDir);
+    const outputDir = path.join(tmpDir, 'output');
+    await expect(
+      actionInstall({
+        entries: [{ package: PKG, output: { path: outputDir, gitignore: false } }],
+        cwd: tmpDir,
+        frozenLockfile: true,
+      }),
+    ).rejects.toThrow('.filedist.lock');
+  }, 60_000);
+
+  it('uses pinned version from lock file when frozenLockfile is true', async () => {
+    const PKG = 'lock-frozen-use-pkg';
+    // Install version 1.0.0 and create a lock file pinning it
+    await installMockPackage(PKG, '1.0.0', { 'data/file.txt': 'v1' }, tmpDir);
+    const outputDir = path.join(tmpDir, 'output');
+    // First run: normal install to create lock file
+    await actionInstall({
+      entries: [{ package: PKG, output: { path: outputDir, gitignore: false } }],
+      cwd: tmpDir,
+    });
+    expect(fs.existsSync(path.join(tmpDir, '.filedist.lock'))).toBe(true);
+    // Second run with frozenLockfile: should succeed using pinned version
+    await actionInstall({
+      entries: [{ package: PKG, output: { path: outputDir, gitignore: false } }],
+      cwd: tmpDir,
+      frozenLockfile: true,
+    });
+    expect(fs.existsSync(path.join(outputDir, 'data/file.txt'))).toBe(true);
+  }, 60_000);
+
+  it('does not update lock file when frozenLockfile is true', async () => {
+    const PKG = 'lock-frozen-noupdate-pkg';
+    await installMockPackage(PKG, '2.0.0', { 'data/file.txt': 'hello' }, tmpDir);
+    const outputDir = path.join(tmpDir, 'output');
+    // Create a minimal lock file manually
+    const lockPath = path.join(tmpDir, '.filedist.lock');
+    fs.writeFileSync(
+      lockPath,
+      JSON.stringify({
+        lockfileVersion: 1,
+        packages: { [PKG]: { source: 'npm', spec: PKG, resolvedVersion: '2.0.0' } },
+      }),
+    );
+    const originalContent = fs.readFileSync(lockPath, 'utf8');
+    await actionInstall({
+      entries: [{ package: PKG, output: { path: outputDir, gitignore: false } }],
+      cwd: tmpDir,
+      frozenLockfile: true,
+    });
+    // Lock file should be unchanged
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe(originalContent);
+  }, 60_000);
 });

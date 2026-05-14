@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "packages": {
+    "git:file:///Users/flaviostutz/Documents/development/flaviostutz/filedist/examples/git-sources-config/repos/parent-repo@v2.0.0": {
+      "source": "git",
+      "spec": "git:file:///Users/flaviostutz/Documents/development/flaviostutz/filedist/examples/git-sources-config/repos/parent-repo@v2.0.0",
+      "resolvedVersion": "491ef02f68d1"
+    },
+    "git:file:///Users/flaviostutz/Documents/development/flaviostutz/filedist/examples/git-sources-config/repos/child-repo@v1.0.0": {
+      "source": "git",
+      "spec": "git:file:///Users/flaviostutz/Documents/development/flaviostutz/filedist/examples/git-sources-config/repos/child-repo@v1.0.0",
+      "resolvedVersion": "8655bb9ab5e9"
+    }
+  }
+}

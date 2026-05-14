@@ -30,6 +30,16 @@ export type SourceRuntime = {
    */
   expandGitSparseCheckout: (packagePath: string, patterns: string[]) => void;
   cleanup: () => void;
+  /**
+   * Returns all packages resolved during this runtime's lifetime.
+   * Key is the original spec string (e.g. "eslint@^8"). Value contains source and resolved version.
+   */
+  getResolvedPackages: () => Map<string, { source: 'npm' | 'git'; resolvedVersion: string }>;
+  /**
+   * Pin exact versions for known specs. When set, resolvePackage substitutes
+   * the pinned version instead of resolving from npm/git registries.
+   */
+  setLockedVersions: (locked: Map<string, string>) => void;
 };
 
 type PackageSourceKind = 'npm' | 'git';
@@ -74,6 +84,11 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
   const packageCache = new Map<string, ResolvedPackageSource>();
   const cloneDirs = new Set<string>();
   let tempRoot = '';
+  // Map from original spec string → resolved version info (populated during resolvePackage calls)
+  const resolvedSpecMap = new Map<string, { source: 'npm' | 'git'; resolvedVersion: string }>();
+  // Optional frozen version map: spec → exact pinned version
+
+  let lockedVersions: Map<string, string> | undefined;
 
   const ensureTempRoot = (): string => {
     if (!tempRoot) {
@@ -94,14 +109,32 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
         throw new Error('resolvePackage requires an entry with a package spec');
       }
 
-      const target = parsePackageTarget(entry.package);
+      const originalSpec = entry.package;
+      const target = parsePackageTarget(originalSpec);
+
+      // When locked versions are set, pin the requested version (branch/tag/commit for git, semver for npm)
+      // eslint-disable-next-line no-undefined
+      if (lockedVersions !== undefined) {
+        const pinnedVersion = lockedVersions.get(originalSpec);
+        // eslint-disable-next-line no-undefined
+        if (pinnedVersion !== undefined) {
+          target.requestedVersion = pinnedVersion;
+        }
+      }
+
       const sparsePatterns = entry.selector?.files ?? [];
       const patternsKey = [...sparsePatterns].sort().join('\0');
       const cacheKey = `${target.source}|${target.packageName}|${target.requestedVersion ?? ''}|${patternsKey}`;
 
       if (!upgrade) {
         const cached = packageCache.get(cacheKey);
-        if (cached) return cached;
+        if (cached) {
+          resolvedSpecMap.set(originalSpec, {
+            source: cached.source,
+            resolvedVersion: cached.packageVersion,
+          });
+          return cached;
+        }
       }
 
       const resolved =
@@ -111,6 +144,10 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
 
       const packageSource = await resolved;
       packageCache.set(cacheKey, packageSource);
+      resolvedSpecMap.set(originalSpec, {
+        source: packageSource.source,
+        resolvedVersion: packageSource.packageVersion,
+      });
       if (packageSource.source === 'git') {
         cloneDirs.add(packageSource.packagePath);
       }
@@ -133,6 +170,12 @@ export function createSourceRuntime(cwd: string, verbose = false): SourceRuntime
         true,
       );
       spawnWithLog('git', ['-C', packagePath, 'checkout'], cwd, verbose, true);
+    },
+    getResolvedPackages(): Map<string, { source: 'npm' | 'git'; resolvedVersion: string }> {
+      return new Map(resolvedSpecMap);
+    },
+    setLockedVersions(locked: Map<string, string>): void {
+      lockedVersions = locked;
     },
     cleanup(): void {
       for (const cloneDir of cloneDirs) {

@@ -36,6 +36,8 @@ export type ParsedArgv = {
   ignoreConfig?: boolean;
   /** --local-only: skip package installs/git clones; verify only against .filedist markers */
   localOnly?: boolean;
+  /** --frozen-lockfile: use .filedist.lock exclusively; fail if lock file is missing */
+  frozenLockfile?: boolean;
 };
 
 export function resolveEffectivePresets(
@@ -143,6 +145,7 @@ export function parseArgv(argv: string[]): ParsedArgv {
     verbose: argv.includes('-v') ? true : verboseFlag,
     ignoreConfig: getBoolFlag('--no-save'),
     localOnly: getBoolFlag('--local-only'),
+    frozenLockfile: getBoolFlag('--frozen-lockfile'),
   };
 }
 

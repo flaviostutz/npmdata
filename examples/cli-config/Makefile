@@ -15,7 +15,7 @@ test: clean install
 	# --- Test 1: config from package.json "filedist" key ---
 	# extract without --packages: reads entries from the "filedist" key in package.json
 	# and applies filedist.defaultPresets=["basic"]
-	pnpm exec filedist extract
+	pnpm exec filedist install
 	node ../../.github/scripts/check-cli-config-symlinks.cjs
 	test ! -e output/eslint/conf/globals.js
 	test -e output/lastUpdated
@@ -32,7 +32,7 @@ test: clean install
 	}; \
 	retarget_symlink output/data-symlink/user1.json output/docs/README.md
 	! pnpm exec filedist check
-	pnpm exec filedist extract
+	pnpm exec filedist install
 	node ../../.github/scripts/check-cli-config-symlinks.cjs
 
 	# purge without --packages: reads entries from package.json
@@ -48,7 +48,7 @@ test: clean install
 	jq '.filedist' package.json > .filedistrc
 	jq 'del(.filedist)' package.json > package.json.tmp && mv package.json.tmp package.json
 
-	pnpm exec filedist extract
+	pnpm exec filedist install
 	node ../../.github/scripts/check-cli-config-symlinks.cjs
 	test ! -e output/eslint/conf/globals.js
 	test -e output/lastUpdated
@@ -67,7 +67,7 @@ test: clean install
 
 	# --- Test 3: explicit --presets overrides defaultPresets ---
 	rm -rf output
-	pnpm exec filedist extract --presets "nested-eslint"
+	pnpm exec filedist install --presets "nested-eslint"
 	test -e output/nested-eslint/conf/globals.js
 	test ! -e output/docs/adrs/adr-001-sample1.md
 	test ! -e output/data/users-dataset/user1.json
@@ -83,7 +83,7 @@ test: clean install
 
 	# --- Test 5: --all ignores defaultPresets and processes every configured entry ---
 	rm -rf output
-	pnpm exec filedist extract --all
+	pnpm exec filedist install --all
 	node ../../.github/scripts/check-cli-config-symlinks.cjs
 	test -e output/eslint/conf/globals.js
 	test -e output/nested-eslint/conf/globals.js

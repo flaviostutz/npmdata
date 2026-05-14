@@ -4,7 +4,7 @@ import { FiledistConfig, ProgressEvent } from '../../types';
 import { parseArgv, resolveEntriesFromConfigAndArgs } from '../argv';
 import { printUsage } from '../usage';
 import { formatProgressFile } from '../progress';
-import { actionExtract } from '../../package/action-extract';
+import { actionInstall } from '../../package/action-install';
 import { spawnWithLog } from '../../utils';
 
 const POST_EXTRACT_CMD_EXAMPLE = '["node", "scripts/post-extract.js"]';
@@ -32,16 +32,16 @@ function resolvePostExtractCmd(
 }
 
 /**
- * `extract` CLI action handler.
- * Parses argv, merges with config, calls actionExtract, prints summary.
+ * `install` CLI action handler.
+ * Parses argv, merges with config, calls actionInstall, prints summary.
  */
-export async function runExtract(
+export async function runInstall(
   config: FiledistConfig | null,
   argv: string[],
   cwd: string,
 ): Promise<void> {
   if (argv.includes('--help')) {
-    printUsage('extract');
+    printUsage('install');
     return;
   }
   const parsed = parseArgv(argv);
@@ -49,21 +49,22 @@ export async function runExtract(
 
   if (entries.length === 0) {
     if (parsed.verbose) {
-      console.log('[verbose] No packages match the specified preset filter. Nothing to extract.');
+      console.log('[verbose] No packages match the specified preset filter. Nothing to install.');
     }
     return;
   }
 
   if (parsed.verbose) {
     console.log(
-      `[verbose] Running CLI extract with entries: ${entries.map((e) => e.package + ' ' + JSON.stringify(e.selector)).join(', ')}`,
+      `[verbose] Running CLI install with entries: ${entries.map((e) => e.package + ' ' + JSON.stringify(e.selector)).join(', ')}`,
     );
   }
 
-  const result = await actionExtract({
+  const result = await actionInstall({
     entries,
     cwd,
     verbose: parsed.verbose,
+    frozenLockfile: parsed.frozenLockfile,
     onProgress: (event: ProgressEvent) => {
       if (entries[0]?.silent) return;
       if (event.type === 'file-added') console.log(`  + ${formatProgressFile(event)}`);
@@ -88,16 +89,16 @@ export async function runExtract(
   if (!isDryRun && config?.postExtractCmd !== undefined) {
     const command = resolvePostExtractCmd(config.postExtractCmd, argv);
     if (parsed.verbose) {
-      console.log(`[verbose] Running post-extract command: ${command.display}`);
+      console.log(`[verbose] Running post-install command: ${command.display}`);
     }
     spawnWithLog(command.command, command.args, cwd, parsed.verbose, true);
     if (parsed.verbose) {
-      console.log(`[verbose] Post-extract command completed successfully.`);
+      console.log(`[verbose] Post-install command completed successfully.`);
     }
   }
 
   console.log(
-    `Extract complete: ${result.added} added, ${result.modified} modified, ` +
+    `Install complete: ${result.added} added, ${result.modified} modified, ` +
       `${result.deleted} deleted, ${result.skipped} skipped.`,
   );
 }

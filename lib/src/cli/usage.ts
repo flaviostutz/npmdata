@@ -10,12 +10,13 @@ export function printUsage(command?: string): void {
   const cmd = command;
 
   switch (cmd) {
-    case 'extract':
+    case 'install':
       console.log(`
-Usage: filedist [extract] [options]
+Usage: filedist [install] [options]
 
-Extract files from one or more npm packages into a local output directory.
-In config-file mode, the root-level postExtractCmd runs after a successful non-dry-run extract.
+Install files from one or more npm packages into a local output directory.
+Reads (or creates) .filedist.lock to pin exact package versions for reproducible installs.
+In config-file mode, the root-level postExtractCmd runs after a successful non-dry-run install.
 
 Options:
   --packages <specs>      Comma-separated package specs (e.g. my-pkg@^1.2.3, git:github.com/org/repo.git@main). Overrides config sets.
@@ -24,11 +25,12 @@ Options:
   --content-regex <re>    Comma-separated regex strings for content filtering.
   --force                 Overwrite existing unmanaged files.
   --mutable               Skip files that already exist; mark extracted files as mutable (check ignores content changes).
-  --nosync [bool]         Keep stale managed files on disk during extract (default: false).
+  --nosync [bool]         Keep stale managed files on disk during install (default: false).
   --gitignore [bool]      Enable/disable .gitignore update (default: true). Use --gitignore=false to disable.
   --managed [bool]        Enable/disable managed mode (default: true). Use --managed=false to write without .filedist marker.
   --dry-run               Report changes without writing to disk.
   --upgrade               Force fresh package install even if satisfying version installed.
+  --frozen-lockfile       Use .filedist.lock exclusively; fail if lock file does not exist. Does not update the lock file.
   --presets <tags>        Comma-separated preset tags; only matching entries are processed. Overrides config defaultPresets.
   --all                   Ignore config defaultPresets and process all configured entries.
   --config <file>         Path to a config file (overrides auto-discovered .filedistrc / package.json).
@@ -142,8 +144,8 @@ Exit codes: 0 success | 1 no configuration found
 Usage: filedist [command] [options]
 
 Commands:
-  extract (default)  Extract files from npm packages
-  check              Verify extracted files match package sources
+  install (default)  Install files from npm packages; writes .filedist.lock
+  check              Verify installed files match package sources
   list               List all managed files
   purge              Remove managed files
   init               Scaffold a publishable data package

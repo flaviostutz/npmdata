@@ -1,7 +1,7 @@
 # cli-config
 
 This example demonstrates using **filedist** via a local configuration file rather than passing
-`--packages` on every command. It shows that `filedist extract`, `filedist check`, and `filedist purge`
+`--packages` on every command. It shows that `filedist install`, `filedist check`, and `filedist purge`
 all work without `--packages` when a configuration is detected automatically.
 
 ## How it works
@@ -64,7 +64,7 @@ Each entry in the `sets` array supports the same fields as a data-package `"file
 make install
 
 # extracts files – no --packages argument needed; defaultPresets=["basic"] is applied
-pnpm exec filedist extract
+pnpm exec filedist install
 
 # verifies local files are in sync
 pnpm exec filedist check
@@ -100,13 +100,13 @@ pnpm exec filedist presets
 # → extra
 
 # extract using the configured default preset set (same effect as --presets basic)
-pnpm exec filedist extract
+pnpm exec filedist install
 
 # override the configured default and run a different preset set
-pnpm exec filedist extract --presets extra
+pnpm exec filedist install --presets extra
 
 # ignore the configured default and process all configured entries
-pnpm exec filedist extract --all
+pnpm exec filedist install --all
 
 # check using the configured default preset set
 pnpm exec filedist check

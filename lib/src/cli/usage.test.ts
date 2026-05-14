@@ -18,20 +18,21 @@ describe('printUsage', () => {
   it('prints general usage when no command is given', () => {
     printUsage();
     expect(lines.join('\n')).toMatch(/usage: filedist \[command] \[options]/i);
-    expect(lines.join('\n')).toMatch(/extract \(default\)/i);
+    expect(lines.join('\n')).toMatch(/install \(default\)/i);
     expect(lines.join('\n')).toMatch(/check/i);
     expect(lines.join('\n')).not.toMatch(/--packages/);
   });
 
-  it('prints extract usage when command is "extract"', () => {
-    printUsage('extract');
-    expect(lines.join('\n')).toMatch(/filedist.*extract/i);
+  it('prints install usage when command is "install"', () => {
+    printUsage('install');
+    expect(lines.join('\n')).toMatch(/filedist.*install/i);
     expect(lines.join('\n')).toMatch(/--output/);
     expect(lines.join('\n')).toMatch(/--all/);
     expect(lines.join('\n')).toMatch(/--nosync/);
     expect(lines.join('\n')).toMatch(/git:github\.com/);
     expect(lines.join('\n')).toMatch(/defaultpresets/i);
     expect(lines.join('\n')).toMatch(/postextractcmd/i);
+    expect(lines.join('\n')).toMatch(/--frozen-lockfile/);
     expect(lines.join('\n')).not.toMatch(/--source/);
   });
 
@@ -63,7 +64,7 @@ describe('printUsage', () => {
   it('prints general usage for an unknown command', () => {
     printUsage('unknown');
     expect(lines.join('\n')).toMatch(/filedist.*command/i);
-    expect(lines.join('\n')).toMatch(/extract.*default/i);
+    expect(lines.join('\n')).toMatch(/install.*default/i);
   });
 });
 

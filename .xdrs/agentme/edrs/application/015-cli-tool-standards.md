@@ -23,7 +23,7 @@ This keeps the user-facing command predictable while preserving a clean library 
 #### CLI command surface
 
 - CLI tools should default to the format `[tool] [command] [options] [arguments]`.
-- Example: `filedist extract --packages=test mydir`
+- Example: `filedist install --packages=test mydir`
 - A single-action tool may omit `[command]` only when adding a subcommand would be artificial and there is no meaningful action split.
 - Every CLI tool must expose:
   - `--help` on the root command

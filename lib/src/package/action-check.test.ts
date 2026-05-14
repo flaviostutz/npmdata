@@ -11,7 +11,7 @@ import { writeMarker, markerPath } from '../fileset/markers';
 import { filterEntriesByPresets } from '../utils';
 
 import { actionCheck } from './action-check';
-import { actionExtract } from './action-extract';
+import { actionInstall } from './action-install';
 
 function sha256(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex').slice(18, 30);
@@ -106,12 +106,12 @@ describe('actionCheck', () => {
     );
 
     const outputDir = path.join(tmpDir, 'out-nosync');
-    await actionExtract({
+    await actionInstall({
       entries: [{ package: 'check-nosync-pkg@1.0.0', output: { path: outputDir } }],
       cwd: tmpDir,
     });
 
-    await actionExtract({
+    await actionInstall({
       entries: [
         {
           package: 'check-nosync-pkg@1.0.0',

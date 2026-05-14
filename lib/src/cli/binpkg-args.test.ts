@@ -49,7 +49,7 @@ describe('binpkg defaultPresets forwarding', () => {
       }),
     );
 
-    await expect(binpkg(binDir, ['extract', '--output', 'output'])).rejects.toThrow(
+    await expect(binpkg(binDir, ['install', '--output', 'output'])).rejects.toThrow(
       'process.exit(0)',
     );
 
@@ -57,7 +57,7 @@ describe('binpkg defaultPresets forwarding', () => {
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--output',
         'output',
         '--presets',
@@ -80,14 +80,14 @@ describe('binpkg defaultPresets forwarding', () => {
     );
 
     await expect(
-      binpkg(binDir, ['extract', '--output', 'output', '--presets', 'special']),
+      binpkg(binDir, ['install', '--output', 'output', '--presets', 'special']),
     ).rejects.toThrow('process.exit(0)');
 
     expect(mockCli).toHaveBeenCalledWith(
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--output',
         'output',
         '--presets',
@@ -109,7 +109,7 @@ describe('binpkg defaultPresets forwarding', () => {
       }),
     );
 
-    await expect(binpkg(binDir, ['extract', '--output', 'output', '--all'])).rejects.toThrow(
+    await expect(binpkg(binDir, ['install', '--output', 'output', '--all'])).rejects.toThrow(
       'process.exit(0)',
     );
 
@@ -117,7 +117,7 @@ describe('binpkg defaultPresets forwarding', () => {
       [
         'node',
         'filedist',
-        'extract',
+        'install',
         '--output',
         'output',
         '--all',
